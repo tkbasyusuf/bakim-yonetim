@@ -1,0 +1,1664 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bakım Yönetim Sistemi</title>
+<style>
+  :root{
+    --lacivert:#1F3864; --lacivert-ac:#2E4F8F; --mavi:#3B6FD4;
+    --gri-1:#F4F6FA; --gri-2:#E6EAF2; --gri-3:#C9D1E0;
+    --metin:#1B2333; --metin-2:#5B6577;
+    --yesil:#0E7C5A; --yesil-bg:#E4F5EE;
+    --amber:#B8730A; --amber-bg:#FDF3E2;
+    --kirmizi:#C0392B; --kirmizi-bg:#FDEDEB;
+    --golge:0 1px 3px rgba(31,56,100,.12), 0 1px 2px rgba(31,56,100,.08);
+    --golge-2:0 4px 16px rgba(31,56,100,.16);
+    --r:10px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    background:var(--gri-1); color:var(--metin); font-size:14px; line-height:1.5;
+    -webkit-font-smoothing:antialiased; padding-bottom:70px;
+  }
+
+  /* ---------- ÜST BAR ---------- */
+  header{
+    background:var(--lacivert); color:#fff; padding:10px 16px;
+    display:flex; align-items:center; gap:12px; position:sticky; top:0; z-index:50;
+    box-shadow:var(--golge);
+  }
+  header .logo{font-weight:700; font-size:15px; letter-spacing:.2px; white-space:nowrap}
+  header .logo small{display:block; font-weight:400; font-size:11px; opacity:.72; letter-spacing:0}
+  header .bosluk{flex:1}
+  header select{
+    background:rgba(255,255,255,.14); color:#fff; border:1px solid rgba(255,255,255,.25);
+    border-radius:6px; padding:6px 8px; font-size:13px; max-width:150px;
+  }
+  header select option{color:#1B2333}
+  header button{
+    background:rgba(255,255,255,.14); color:#fff; border:1px solid rgba(255,255,255,.25);
+    border-radius:6px; padding:6px 10px; font-size:13px; cursor:pointer;
+  }
+  header button:hover{background:rgba(255,255,255,.24)}
+
+  /* ---------- SEKMELER ---------- */
+  nav{
+    background:#fff; border-bottom:1px solid var(--gri-2); display:flex;
+    overflow-x:auto; position:sticky; top:52px; z-index:40;
+  }
+  nav button{
+    background:none; border:none; padding:13px 16px; font-size:13.5px; font-weight:600;
+    color:var(--metin-2); cursor:pointer; white-space:nowrap; border-bottom:2.5px solid transparent;
+    font-family:inherit;
+  }
+  nav button.aktif{color:var(--lacivert); border-bottom-color:var(--lacivert)}
+  nav button:hover{color:var(--lacivert)}
+
+  main{padding:16px; max-width:1240px; margin:0 auto}
+  .sayfa{display:none}
+  .sayfa.aktif{display:block}
+
+  /* ---------- KARTLAR ---------- */
+  .kart{background:#fff; border:1px solid var(--gri-2); border-radius:var(--r); box-shadow:var(--golge); margin-bottom:16px; overflow:hidden}
+  .kart-bas{padding:13px 16px; border-bottom:1px solid var(--gri-2); display:flex; align-items:center; gap:10px; background:#FBFCFE}
+  .kart-bas h2{font-size:14.5px; font-weight:700; color:var(--lacivert)}
+  .kart-bas .bosluk{flex:1}
+  .kart-govde{padding:16px}
+  .kart-govde.sifir{padding:0}
+
+  /* ---------- ÖZET KUTULARI ---------- */
+  .ozet{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:16px}
+  .kutu{background:#fff; border:1px solid var(--gri-2); border-radius:var(--r); padding:14px 16px; box-shadow:var(--golge); border-left:3px solid var(--mavi)}
+  .kutu.uyari{border-left-color:var(--amber)}
+  .kutu.kritik{border-left-color:var(--kirmizi)}
+  .kutu.iyi{border-left-color:var(--yesil)}
+  .kutu .etiket{font-size:11.5px; color:var(--metin-2); text-transform:uppercase; letter-spacing:.4px; font-weight:600}
+  .kutu .deger{font-size:26px; font-weight:700; color:var(--lacivert); margin-top:3px; line-height:1.1}
+  .kutu .alt{font-size:12px; color:var(--metin-2); margin-top:3px}
+
+  /* ---------- TABLO ---------- */
+  .tablo-sar{overflow-x:auto}
+  table{width:100%; border-collapse:collapse; font-size:13px}
+  th{
+    background:var(--gri-1); text-align:left; padding:10px 12px; font-weight:600;
+    color:var(--metin-2); font-size:11.5px; text-transform:uppercase; letter-spacing:.3px;
+    border-bottom:1px solid var(--gri-2); white-space:nowrap;
+  }
+  td{padding:10px 12px; border-bottom:1px solid var(--gri-2); vertical-align:top}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:#FAFBFD}
+  tr.tiklanir{cursor:pointer}
+
+  /* ---------- ROZETLER ---------- */
+  .rozet{display:inline-block; padding:2.5px 9px; border-radius:20px; font-size:11.5px; font-weight:600; white-space:nowrap}
+  .rozet.yesil{background:var(--yesil-bg); color:var(--yesil)}
+  .rozet.amber{background:var(--amber-bg); color:var(--amber)}
+  .rozet.kirmizi{background:var(--kirmizi-bg); color:var(--kirmizi)}
+  .rozet.gri{background:var(--gri-2); color:var(--metin-2)}
+  .rozet.mavi{background:#E8F0FD; color:var(--mavi)}
+
+  /* ---------- BUTONLAR ---------- */
+  button.btn{
+    background:var(--lacivert); color:#fff; border:none; border-radius:7px;
+    padding:9px 15px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;
+  }
+  button.btn:hover{background:var(--lacivert-ac)}
+  button.btn:disabled{background:var(--gri-3); cursor:not-allowed}
+  button.btn.ikincil{background:#fff; color:var(--lacivert); border:1px solid var(--gri-3)}
+  button.btn.ikincil:hover{background:var(--gri-1)}
+  button.btn.tehlike{background:var(--kirmizi)}
+  button.btn.kucuk{padding:6px 11px; font-size:12px}
+  button.btn.yesil{background:var(--yesil)}
+
+  /* ---------- FORM ---------- */
+  .form-izgara{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:13px}
+  .alan{display:flex; flex-direction:column; gap:5px}
+  .alan.genis{grid-column:1/-1}
+  .alan label{font-size:12px; font-weight:600; color:var(--metin-2)}
+  .alan input,.alan select,.alan textarea{
+    border:1px solid var(--gri-3); border-radius:7px; padding:9px 11px; font-size:13.5px;
+    font-family:inherit; background:#fff; color:var(--metin); width:100%;
+  }
+  .alan input:focus,.alan select:focus,.alan textarea:focus{outline:2px solid var(--mavi); outline-offset:-1px; border-color:var(--mavi)}
+  .alan textarea{resize:vertical; min-height:70px}
+  .alan input[readonly]{background:var(--gri-1); color:var(--metin-2)}
+
+  /* ---------- CHECKLIST ---------- */
+  .madde{border:1px solid var(--gri-2); border-radius:9px; padding:12px 14px; margin-bottom:9px; background:#fff}
+  .madde.uygun{border-left:3px solid var(--yesil); background:#FCFEFD}
+  .madde.uygundegil{border-left:3px solid var(--kirmizi); background:#FFFCFC}
+  .madde.yapilmadi{border-left:3px solid var(--gri-3); background:#FCFCFD}
+  .madde-ust{display:flex; gap:10px; align-items:flex-start; margin-bottom:9px}
+  .madde-no{
+    background:var(--lacivert); color:#fff; width:23px; height:23px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:11.5px; font-weight:700; flex-shrink:0;
+  }
+  .madde-metin{flex:1; font-size:13.5px; line-height:1.55}
+  .madde-tip{font-size:11px; color:var(--metin-2); background:var(--gri-1); padding:2px 8px; border-radius:4px; flex-shrink:0}
+  .madde-alt{display:flex; gap:9px; flex-wrap:wrap; align-items:center; padding-left:33px}
+  .secenekler{display:flex; gap:6px}
+  .secenekler label{
+    border:1px solid var(--gri-3); border-radius:6px; padding:5px 11px; font-size:12.5px;
+    cursor:pointer; background:#fff; user-select:none;
+  }
+  .secenekler input{display:none}
+  .secenekler input:checked + span{font-weight:700}
+  .secenekler label:has(input:checked){border-width:1.5px}
+  .secenekler label.s-uygun:has(input:checked){background:var(--yesil-bg); border-color:var(--yesil); color:var(--yesil)}
+  .secenekler label.s-uygundegil:has(input:checked){background:var(--kirmizi-bg); border-color:var(--kirmizi); color:var(--kirmizi)}
+  .secenekler label.s-yapilmadi:has(input:checked){background:var(--gri-2); border-color:var(--metin-2); color:var(--metin-2)}
+  .madde-alt input.not{flex:1; min-width:150px; border:1px solid var(--gri-3); border-radius:6px; padding:6px 10px; font-size:12.5px; font-family:inherit}
+
+  /* ---------- TAKVİM ---------- */
+  .takvim{overflow-x:auto}
+  .takvim table{min-width:820px}
+  .takvim td.ay{text-align:center; padding:7px 4px; cursor:pointer}
+  .takvim th.ay{text-align:center; font-size:10.5px; padding:9px 3px}
+  .hucre{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:27px; height:27px; border-radius:6px; font-weight:700; font-size:12px;
+  }
+  .hucre.p{background:#E8F0FD; color:var(--mavi); border:1px solid #C3D8F8}
+  .hucre.y{background:var(--yesil-bg); color:var(--yesil); border:1px solid #B5E3D2}
+  .hucre.e{background:var(--amber-bg); color:var(--amber); border:1px solid #F3DCB0}
+  .hucre.g{background:var(--kirmizi-bg); color:var(--kirmizi); border:1px solid #F7CFC9}
+
+  /* ---------- MODAL ---------- */
+  .ortu{
+    position:fixed; inset:0; background:rgba(20,28,45,.55); z-index:100;
+    display:none; align-items:flex-start; justify-content:center; padding:20px; overflow-y:auto;
+  }
+  .ortu.acik{display:flex}
+  .modal{
+    background:#fff; border-radius:13px; width:100%; max-width:820px; box-shadow:var(--golge-2);
+    margin:auto 0; overflow:hidden;
+  }
+  .modal.dar{max-width:520px}
+  .modal-bas{
+    padding:15px 18px; border-bottom:1px solid var(--gri-2); display:flex; align-items:center; gap:12px;
+    background:var(--lacivert); color:#fff;
+  }
+  .modal-bas h3{font-size:15px; font-weight:700; flex:1}
+  .modal-bas .kapat{background:none; border:none; color:#fff; font-size:22px; cursor:pointer; line-height:1; opacity:.8; padding:0 4px}
+  .modal-bas .kapat:hover{opacity:1}
+  .modal-govde{padding:18px; max-height:calc(100vh - 210px); overflow-y:auto}
+  .modal-alt{padding:13px 18px; border-top:1px solid var(--gri-2); display:flex; gap:9px; justify-content:flex-end; background:#FBFCFE; flex-wrap:wrap}
+
+  /* ---------- BÖLÜM BAŞLIĞI ---------- */
+  .bolum{font-size:12px; font-weight:700; color:var(--lacivert); text-transform:uppercase;
+         letter-spacing:.5px; margin:20px 0 11px; padding-bottom:6px; border-bottom:1.5px solid var(--gri-2)}
+  .bolum:first-child{margin-top:0}
+
+  /* ---------- BİLGİ SATIRI ---------- */
+  .bilgi{display:grid; grid-template-columns:150px 1fr; gap:8px 14px; font-size:13.5px}
+  .bilgi dt{color:var(--metin-2); font-weight:600}
+  .bilgi dd{color:var(--metin)}
+
+  /* ---------- BOŞ DURUM ---------- */
+  .bos{text-align:center; padding:36px 20px; color:var(--metin-2); font-size:13.5px}
+
+  /* ---------- BİLDİRİM ---------- */
+  #bildirim{
+    position:fixed; bottom:82px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--metin); color:#fff; padding:11px 20px; border-radius:8px; font-size:13.5px;
+    z-index:200; opacity:0; transition:.25s; pointer-events:none; box-shadow:var(--golge-2); max-width:90vw;
+  }
+  #bildirim.goster{opacity:1; transform:translateX(-50%) translateY(0)}
+  #bildirim.hata{background:var(--kirmizi)}
+  #bildirim.basari{background:var(--yesil)}
+
+  /* ---------- YÜKLENİYOR ---------- */
+  #yukleniyor{
+    position:fixed; inset:0; background:rgba(244,246,250,.82); z-index:300;
+    display:none; align-items:center; justify-content:center; flex-direction:column; gap:14px;
+  }
+  #yukleniyor.acik{display:flex}
+  .spin{width:34px; height:34px; border:3px solid var(--gri-3); border-top-color:var(--lacivert);
+        border-radius:50%; animation:don .7s linear infinite}
+  @keyframes don{to{transform:rotate(360deg)}}
+
+  /* ---------- FİLTRE ÇUBUĞU ---------- */
+  .filtre{display:flex; gap:9px; flex-wrap:wrap; align-items:center; margin-bottom:14px}
+  .filtre input,.filtre select{
+    border:1px solid var(--gri-3); border-radius:7px; padding:8px 11px; font-size:13px;
+    font-family:inherit; background:#fff;
+  }
+  .filtre input[type=search]{min-width:190px; flex:1; max-width:300px}
+
+  /* ---------- MOBİL ---------- */
+  @media(max-width:640px){
+    header .logo small{display:none}
+    main{padding:12px}
+    .bilgi{grid-template-columns:1fr; gap:2px 0}
+    .bilgi dt{margin-top:8px}
+    .madde-alt{padding-left:0}
+    .secenekler{width:100%}
+    .secenekler label{flex:1; text-align:center}
+    .modal-govde{max-height:calc(100vh - 190px)}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Bakım Yönetim Sistemi<small>Technic 5 Elektronik San. ve Tic. A.Ş.</small></div>
+  <div class="bosluk"></div>
+  <select id="personelSec" title="İşlemi yapan kişi"></select>
+  <button onclick="veriYukle(true)" title="Yenile">&#8635;</button>
+</header>
+
+<nav>
+  <button class="aktif" data-sayfa="panel">Panel</button>
+  <button data-sayfa="isemri">İş Emirleri</button>
+  <button data-sayfa="plan">Bakım Planı</button>
+  <button data-sayfa="makine">Makineler</button>
+  <button data-sayfa="parca">Yedek Parça</button>
+  <button data-sayfa="rapor">Raporlar</button>
+</nav>
+
+<main>
+
+  <!-- ============ PANEL ============ -->
+  <section class="sayfa aktif" id="s-panel">
+    <div class="ozet" id="ozetKutular"></div>
+
+    <div class="kart">
+      <div class="kart-bas">
+        <h2>Bakım Durumu</h2>
+        <div class="bosluk"></div>
+        <button class="btn kucuk" onclick="isEmriAcModal()">+ Yeni İş Emri</button>
+      </div>
+      <div class="kart-govde sifir tablo-sar">
+        <table>
+          <thead><tr>
+            <th>Makine</th><th>Periyot</th><th>Planlanan</th>
+            <th>Durum</th><th>İş Emri</th><th></th>
+          </tr></thead>
+          <tbody id="panelPlan"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="kart">
+      <div class="kart-bas"><h2>Açık İş Emirleri</h2></div>
+      <div class="kart-govde sifir tablo-sar">
+        <table>
+          <thead><tr>
+            <th>İş Emri No</th><th>Tür</th><th>Makine</th>
+            <th>Kayıt Tarihi</th><th>İlerleme</th><th></th>
+          </tr></thead>
+          <tbody id="panelAcik"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="kart" id="kartKritikStok" style="display:none">
+      <div class="kart-bas"><h2>Kritik Stok Uyarıları</h2></div>
+      <div class="kart-govde sifir tablo-sar">
+        <table>
+          <thead><tr><th>Parça Kodu</th><th>Parça Adı</th><th>Makine</th><th>Stok</th><th>Min</th></tr></thead>
+          <tbody id="panelStok"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ İŞ EMİRLERİ ============ -->
+  <section class="sayfa" id="s-isemri">
+    <div class="filtre">
+      <input type="search" id="fIsEmriAra" placeholder="İş emri no, makine, açıklama ara..." oninput="isEmriListele()">
+      <select id="fIsEmriDurum" onchange="isEmriListele()">
+        <option value="">Tüm durumlar</option>
+        <option value="Açık">Açık</option>
+        <option value="Kapalı">Kapalı</option>
+      </select>
+      <select id="fIsEmriTur" onchange="isEmriListele()">
+        <option value="">Tüm türler</option>
+        <option value="Planlı">Planlı</option>
+        <option value="Arızi">Arızi</option>
+      </select>
+      <select id="fIsEmriMakine" onchange="isEmriListele()"><option value="">Tüm makineler</option></select>
+      <div class="bosluk" style="flex:1"></div>
+      <button class="btn" onclick="isEmriAcModal()">+ Yeni İş Emri</button>
+    </div>
+
+    <div class="kart">
+      <div class="kart-govde sifir tablo-sar">
+        <table>
+          <thead><tr>
+            <th>İş Emri No</th><th>Tür</th><th>Makine</th><th>Kayıt</th>
+            <th>Fiili Bitiş</th><th>Süre</th><th>Durum</th><th></th>
+          </tr></thead>
+          <tbody id="isEmriTablo"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ BAKIM PLANI ============ -->
+  <section class="sayfa" id="s-plan">
+    <div class="filtre">
+      <select id="fPlanYil" onchange="planListele()"></select>
+      <div style="display:flex; gap:11px; align-items:center; font-size:12.5px; color:var(--metin-2); flex-wrap:wrap">
+        <span><span class="hucre p" style="width:20px;height:20px;font-size:11px">P</span> Planlanan</span>
+        <span><span class="hucre p" style="width:20px;height:20px;font-size:11px">İ</span> İşlemde</span>
+        <span><span class="hucre y" style="width:20px;height:20px;font-size:11px">Y</span> Yapıldı</span>
+        <span><span class="hucre e" style="width:20px;height:20px;font-size:11px">E</span> Ertelendi</span>
+        <span><span class="hucre g" style="width:20px;height:20px;font-size:11px">!</span> Gecikmiş</span>
+      </div>
+      <div style="flex:1"></div>
+      <button class="btn ikincil" onclick="planUretModal()">Yıllık Plan Üret</button>
+    </div>
+
+    <div class="kart">
+      <div class="kart-bas"><h2 id="planBaslik">Yıllık Periyodik Bakım Planı</h2></div>
+      <div class="kart-govde sifir takvim">
+        <table>
+          <thead><tr>
+            <th style="min-width:80px">Kod</th><th style="min-width:180px">Makine</th><th style="min-width:80px">Periyot</th>
+            <th class="ay">OCA</th><th class="ay">ŞUB</th><th class="ay">MAR</th><th class="ay">NİS</th>
+            <th class="ay">MAY</th><th class="ay">HAZ</th><th class="ay">TEM</th><th class="ay">AĞU</th>
+            <th class="ay">EYL</th><th class="ay">EKİ</th><th class="ay">KAS</th><th class="ay">ARA</th>
+          </tr></thead>
+          <tbody id="planTakvim"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="kart">
+      <div class="kart-bas"><h2>Plan Detayı</h2></div>
+      <div class="kart-govde sifir tablo-sar">
+        <table>
+          <thead><tr>
+            <th>Plan ID</th><th>Makine</th><th>Periyot</th><th>Planlanan Tarih</th>
+            <th>Durum</th><th>İş Emri</th><th>Gerçekleşen</th><th></th>
+          </tr></thead>
+          <tbody id="planTablo"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MAKİNELER ============ -->
+  <section class="sayfa" id="s-makine">
+    <div class="filtre">
+      <input type="search" id="fMakineAra" placeholder="Makine ara..." oninput="makineListele()">
+      <div style="flex:1"></div>
+      <button class="btn" onclick="makineDuzenle()">+ Yeni Makine</button>
+    </div>
+    <div class="kart">
+      <div class="kart-govde sifir tablo-sar">
+        <table>
+          <thead><tr>
+            <th>Kod</th><th>Makine Adı</th><th>Marka / Model</th><th>Bölüm</th>
+            <th>Kritiklik</th><th>Sorumlu</th><th>Son Bakım</th><th>Durum</th><th></th>
+          </tr></thead>
+          <tbody id="makineTablo"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ YEDEK PARÇA ============ -->
+  <section class="sayfa" id="s-parca">
+    <div class="filtre">
+      <input type="search" id="fParcaAra" placeholder="Parça kodu veya adı ara..." oninput="parcaListele()">
+      <select id="fParcaMakine" onchange="parcaListele()"><option value="">Tüm makineler</option></select>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px">
+        <input type="checkbox" id="fParcaKritik" onchange="parcaListele()"> Sadece kritik stok
+      </label>
+      <div style="flex:1"></div>
+      <button class="btn" onclick="parcaDuzenle()">+ Yeni Parça</button>
+    </div>
+    <div class="kart">
+      <div class="kart-govde sifir tablo-sar">
+        <table>
+          <thead><tr>
+            <th>Parça Kodu</th><th>Parça Adı</th><th>Tedarikçi</th><th>Makine</th>
+            <th>Makinede</th><th>Stok</th><th>Min</th><th></th>
+          </tr></thead>
+          <tbody id="parcaTablo"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RAPORLAR ============ -->
+  <section class="sayfa" id="s-rapor">
+    <div class="filtre">
+      <select id="fRaporYil" onchange="raporCiz()"></select>
+    </div>
+    <div class="ozet" id="raporKutular"></div>
+
+    <div class="kart">
+      <div class="kart-bas"><h2>Makine Bazında Özet</h2></div>
+      <div class="kart-govde sifir tablo-sar">
+        <table>
+          <thead><tr>
+            <th>Makine</th><th>Planlı Bakım</th><th>Arıza</th><th>Toplam Süre</th>
+            <th>Ort. Onarım (MTTR)</th><th>Uygunsuzluk</th>
+          </tr></thead>
+          <tbody id="raporMakine"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="kart">
+      <div class="kart-bas"><h2>Tespit Edilen Uygunsuzluklar</h2></div>
+      <div class="kart-govde sifir tablo-sar">
+        <table>
+          <thead><tr><th>İş Emri</th><th>Makine</th><th>Faaliyet</th><th>Not</th></tr></thead>
+          <tbody id="raporUygunsuz"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ============ MODALLAR ============ -->
+<div class="ortu" id="ortu" onclick="if(event.target===this)modalKapat()">
+  <div class="modal" id="modal">
+    <div class="modal-bas">
+      <h3 id="modalBaslik">Başlık</h3>
+      <button class="kapat" onclick="modalKapat()">&times;</button>
+    </div>
+    <div class="modal-govde" id="modalGovde"></div>
+    <div class="modal-alt" id="modalAlt"></div>
+  </div>
+</div>
+
+<div id="bildirim"></div>
+<div id="yukleniyor"><div class="spin"></div><div id="yuklemeMetin" style="font-size:13px;color:var(--metin-2)">Yükleniyor...</div></div>
+
+<script>
+/* =================================================================
+   AYAR — Apps Script dağıtım URL'sini buraya yapıştır
+   ================================================================= */
+const API_URL = 'https://script.google.com/macros/s/AKfycbz430MT1AXASSaVQSuqo-Vzf8cr1hK60ab5MiIPvx2Joda-5J0RvxpASn1kBhl_qMew/exec';
+
+/* =================================================================
+   DURUM
+   ================================================================= */
+let D = { makineler:[], gorevler:[], plan:[], isEmirleri:[], detaylar:[],
+          parcalar:[], kullanim:[], ayarlar:[], bugun:'' };
+let aktifIsEmri = null;
+
+const AYLAR = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran',
+               'Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+
+/* =================================================================
+   API
+   ================================================================= */
+async function api(action, payload = {}) {
+  if (API_URL.indexOf('BURAYA') === 0) {
+    throw new Error('API_URL ayarlanmamış. HTML dosyasındaki API_URL satırını düzenleyin.');
+  }
+  const govde = Object.assign({ action }, payload);
+  const yanit = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(govde)
+  });
+  if (!yanit.ok) throw new Error('Sunucu hatası: ' + yanit.status);
+  const sonuc = await yanit.json();
+  if (!sonuc.ok) throw new Error(sonuc.hata || 'Bilinmeyen hata');
+  return sonuc.data;
+}
+
+function yukle(acik, metin='Yükleniyor...'){
+  document.getElementById('yuklemeMetin').textContent = metin;
+  document.getElementById('yukleniyor').classList.toggle('acik', acik);
+}
+
+function bildir(mesaj, tip='') {
+  const b = document.getElementById('bildirim');
+  b.textContent = mesaj;
+  b.className = 'goster ' + tip;
+  clearTimeout(b._zaman);
+  b._zaman = setTimeout(() => b.className = tip, 3200);
+}
+
+/* =================================================================
+   YARDIMCI
+   ================================================================= */
+const kacis = s => String(s == null ? '' : s)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
+function makineAdi(kod){
+  const m = D.makineler.find(x => x['Makine Kodu'] === kod);
+  return m ? m['Makine Adı'] : (kod || '-');
+}
+
+function tarihTR(s){
+  if (!s) return '-';
+  const t = String(s).substring(0,10).split('-');
+  return t.length === 3 ? `${t[2]}.${t[1]}.${t[0]}` : s;
+}
+
+function gunFark(tarih){
+  if (!tarih) return null;
+  const a = new Date(String(tarih).substring(0,10) + 'T00:00:00');
+  const b = new Date(D.bugun + 'T00:00:00');
+  if (isNaN(a) || isNaN(b)) return null;
+  return Math.round((a - b) / 86400000);
+}
+
+function sureMetin(dk){
+  const n = parseFloat(dk);
+  if (!n || isNaN(n)) return '-';
+  if (n < 60) return n + ' dk';
+  const s = Math.floor(n/60), k = Math.round(n%60);
+  return k ? `${s} sa ${k} dk` : `${s} sa`;
+}
+
+function personelListesi(){
+  const a = D.ayarlar.find(x => x['Anahtar'] === 'personel');
+  return a ? a['Değer'].split(',').map(s => s.trim()).filter(Boolean) : ['Bakım Personeli'];
+}
+
+const aktifPersonel = () => document.getElementById('personelSec').value || '';
+
+/** Bir iş emrinin checklist ilerlemesi */
+function ilerleme(no){
+  const d = D.detaylar.filter(x => x['İş Emri No'] === no);
+  if (!d.length) return null;
+  const dolu = d.filter(x => x['Sonuç']).length;
+  return { dolu, toplam: d.length, yuzde: Math.round(dolu / d.length * 100) };
+}
+
+/* =================================================================
+   VERİ YÜKLEME
+   ================================================================= */
+async function veriYukle(bildirGoster = false){
+  yukle(true, 'Veriler yükleniyor...');
+  try {
+    D = await api('getAll');
+    ['fIsEmriMakine','fParcaMakine'].forEach(id => {
+      const s = document.getElementById(id);
+      const eski = s.value;
+      s.innerHTML = '<option value="">Tüm makineler</option>' +
+        D.makineler.map(m => `<option value="${kacis(m['Makine Kodu'])}">${kacis(m['Makine Kodu'])} — ${kacis(m['Makine Adı'])}</option>`).join('');
+      s.value = eski;
+    });
+
+    const ps = document.getElementById('personelSec');
+    if (!ps.options.length) {
+      ps.innerHTML = '<option value="">Kişi seçin...</option>' +
+        personelListesi().map(p => `<option>${kacis(p)}</option>`).join('');
+      const kayitli = localStorage.getItem('bym_personel');
+      if (kayitli) ps.value = kayitli;
+      ps.onchange = () => localStorage.setItem('bym_personel', ps.value);
+    }
+
+    const yillar = new Set([new Date().getFullYear()]);
+    D.plan.forEach(p => { if (p['Yıl']) yillar.add(parseInt(p['Yıl'],10)); });
+    D.isEmirleri.forEach(i => {
+      const y = String(i['Kayıt Tarihi']||'').substring(0,4);
+      if (y) yillar.add(parseInt(y,10));
+    });
+    const buYil = new Date().getFullYear();
+    ['fPlanYil','fRaporYil'].forEach(id => {
+      const s = document.getElementById(id);
+      const eski = s.value;
+      s.innerHTML = [...yillar].sort((a,b)=>b-a).map(y => `<option>${y}</option>`).join('');
+      // Varsayılan: içinde bulunulan yıl (listede yoksa en yenisi)
+      s.value = eski || (yillar.has(buYil) ? String(buYil) : s.options[0].value);
+    });
+
+    hepsiniCiz();
+    if (bildirGoster) bildir('Veriler güncellendi', 'basari');
+  } catch (e) {
+    bildir(e.message, 'hata');
+  } finally {
+    yukle(false);
+  }
+}
+
+function hepsiniCiz(){
+  panelCiz(); isEmriListele(); planListele();
+  makineListele(); parcaListele(); raporCiz();
+}
+
+/* =================================================================
+   PANEL
+   ================================================================= */
+function panelCiz(){
+  const acik = D.isEmirleri.filter(i => i['Durum'] === 'Açık');
+  // İş emri açılmış plan satırları "bekleyen" sayılmaz — aksiyon alınmıştır
+  const bekleyen = D.plan.filter(p => p['Durum'] === 'P' && !p['İş Emri No']);
+  const gecikmis = bekleyen.filter(p => { const f = gunFark(p['Planlanan Tarih']); return f !== null && f < 0; });
+  const yaklasan = bekleyen.filter(p => { const f = gunFark(p['Planlanan Tarih']); return f !== null && f >= 0 && f <= 30; });
+  const kritikStok = D.parcalar.filter(p =>
+    (parseFloat(p['Stok Miktar'])||0) < (parseFloat(p['Min Stok'])||0));
+
+  const yil = new Date().getFullYear();
+  const yilPlan = D.plan.filter(p => String(p['Yıl']) === String(yil));
+  const yapilan = yilPlan.filter(p => p['Durum'] === 'Y').length;
+  const uyum = yilPlan.length ? Math.round(yapilan / yilPlan.length * 100) : 0;
+
+  document.getElementById('ozetKutular').innerHTML = `
+    <div class="kutu ${gecikmis.length ? 'kritik' : 'iyi'}">
+      <div class="etiket">Gecikmiş Bakım</div>
+      <div class="deger">${gecikmis.length}</div>
+      <div class="alt">${gecikmis.length ? 'Acil iş emri açılmalı' : 'Gecikme yok'}</div>
+    </div>
+    <div class="kutu ${yaklasan.length ? 'uyari' : ''}">
+      <div class="etiket">30 Gün İçinde</div>
+      <div class="deger">${yaklasan.length}</div>
+      <div class="alt">Yaklaşan planlı bakım</div>
+    </div>
+    <div class="kutu">
+      <div class="etiket">Açık İş Emri</div>
+      <div class="deger">${acik.length}</div>
+      <div class="alt">Tamamlanmayı bekliyor</div>
+    </div>
+    <div class="kutu ${kritikStok.length ? 'kritik' : ''}">
+      <div class="etiket">Kritik Stok</div>
+      <div class="deger">${kritikStok.length}</div>
+      <div class="alt">Min. seviyenin altında</div>
+    </div>
+    <div class="kutu ${uyum >= 80 ? 'iyi' : uyum >= 50 ? 'uyari' : 'kritik'}">
+      <div class="etiket">${yil} Plan Uyumu</div>
+      <div class="deger">%${uyum}</div>
+      <div class="alt">${yapilan} / ${yilPlan.length} bakım yapıldı</div>
+    </div>`;
+
+  // Bakım durumu tablosu
+  const sirali = [...D.plan].sort((a,b) =>
+    String(a['Planlanan Tarih']).localeCompare(String(b['Planlanan Tarih'])));
+  const goster = sirali.filter(p => {
+    if (p['Durum'] !== 'P') return false;
+    const f = gunFark(p['Planlanan Tarih']);
+    return f === null || f <= 90;
+  });
+
+  document.getElementById('panelPlan').innerHTML = goster.length ? goster.map(p => {
+    const f = gunFark(p['Planlanan Tarih']);
+    let rozet, alt;
+    if (p['İş Emri No'])    { rozet = '<span class="rozet mavi">İşlemde</span>'; alt = 'İş emri açıldı'; }
+    else if (f === null)    { rozet = '<span class="rozet gri">Tarihsiz</span>'; alt = ''; }
+    else if (f < 0)         { rozet = '<span class="rozet kirmizi">Gecikmiş</span>'; alt = `${-f} gün geçti`; }
+    else if (f <= 30)       { rozet = '<span class="rozet amber">Yaklaşıyor</span>'; alt = `${f} gün kaldı`; }
+    else                    { rozet = '<span class="rozet mavi">Planlandı</span>'; alt = `${f} gün kaldı`; }
+    return `<tr>
+      <td><strong>${kacis(p['Makine Kodu'])}</strong><br><span style="color:var(--metin-2);font-size:12px">${kacis(makineAdi(p['Makine Kodu']))}</span></td>
+      <td>${kacis(p['Periyot'])}</td>
+      <td>${tarihTR(p['Planlanan Tarih'])}<br><span style="color:var(--metin-2);font-size:12px">${alt}</span></td>
+      <td>${rozet}</td>
+      <td>${p['İş Emri No'] ? `<a href="#" onclick="isEmriAc('${kacis(p['İş Emri No'])}');return false" style="color:var(--mavi)">${kacis(p['İş Emri No'])}</a>` : '<span style="color:var(--metin-2)">—</span>'}</td>
+      <td style="text-align:right">${p['İş Emri No'] ? '' :
+        `<button class="btn kucuk" onclick="isEmriAcModal('${kacis(p['Plan ID'])}')">İş Emri Aç</button>`}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="6" class="bos">Yaklaşan planlı bakım yok.</td></tr>';
+
+  // Açık iş emirleri
+  document.getElementById('panelAcik').innerHTML = acik.length ? acik.map(i => {
+    const il = ilerleme(i['İş Emri No']);
+    return `<tr class="tiklanir" onclick="isEmriAc('${kacis(i['İş Emri No'])}')">
+      <td><strong>${kacis(i['İş Emri No'])}</strong></td>
+      <td><span class="rozet ${i['İşin Türü']==='Arızi'?'kirmizi':'mavi'}">${kacis(i['İşin Türü'])}</span></td>
+      <td>${kacis(i['Makine Kodu'])} — ${kacis(makineAdi(i['Makine Kodu']))}</td>
+      <td>${tarihTR(i['Kayıt Tarihi'])}</td>
+      <td>${il ? `${il.dolu}/${il.toplam} madde (%${il.yuzde})` : '<span style="color:var(--metin-2)">—</span>'}</td>
+      <td style="text-align:right"><button class="btn kucuk ikincil">Aç</button></td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="6" class="bos">Açık iş emri yok.</td></tr>';
+
+  // Kritik stok
+  document.getElementById('kartKritikStok').style.display = kritikStok.length ? '' : 'none';
+  document.getElementById('panelStok').innerHTML = kritikStok.map(p => `<tr>
+    <td>${kacis(p['Parça Kodu'])}</td>
+    <td>${kacis(p['Parça Adı'])}</td>
+    <td>${kacis(p['Makine Kodu'])}</td>
+    <td><span class="rozet kirmizi">${kacis(p['Stok Miktar'])} ${kacis(p['Birim'])}</span></td>
+    <td>${kacis(p['Min Stok'])} ${kacis(p['Birim'])}</td>
+  </tr>`).join('');
+}
+
+/* =================================================================
+   İŞ EMİRLERİ
+   ================================================================= */
+function isEmriListele(){
+  const ara = document.getElementById('fIsEmriAra').value.toLowerCase();
+  const durum = document.getElementById('fIsEmriDurum').value;
+  const tur = document.getElementById('fIsEmriTur').value;
+  const mak = document.getElementById('fIsEmriMakine').value;
+
+  let liste = [...D.isEmirleri].sort((a,b) =>
+    String(b['İş Emri No']).localeCompare(String(a['İş Emri No'])));
+
+  if (durum) liste = liste.filter(i => i['Durum'] === durum);
+  if (tur)   liste = liste.filter(i => i['İşin Türü'] === tur);
+  if (mak)   liste = liste.filter(i => i['Makine Kodu'] === mak);
+  if (ara) liste = liste.filter(i =>
+    [i['İş Emri No'], i['Makine Kodu'], makineAdi(i['Makine Kodu']),
+     i['Açıklama / Kök Neden'], i['Arıza Tanımı']]
+      .join(' ').toLowerCase().includes(ara));
+
+  document.getElementById('isEmriTablo').innerHTML = liste.length ? liste.map(i => `
+    <tr class="tiklanir" onclick="isEmriAc('${kacis(i['İş Emri No'])}')">
+      <td><strong>${kacis(i['İş Emri No'])}</strong></td>
+      <td><span class="rozet ${i['İşin Türü']==='Arızi'?'kirmizi':'mavi'}">${kacis(i['İşin Türü'])}</span></td>
+      <td>${kacis(i['Makine Kodu'])}<br><span style="color:var(--metin-2);font-size:12px">${kacis(makineAdi(i['Makine Kodu']))}</span></td>
+      <td>${tarihTR(i['Kayıt Tarihi'])}</td>
+      <td>${tarihTR(i['Fiili Bitiş'])}</td>
+      <td>${sureMetin(i['Süre (dk)'])}</td>
+      <td><span class="rozet ${i['Durum']==='Kapalı'?'yesil':'amber'}">${kacis(i['Durum'])}</span></td>
+      <td style="text-align:right"><button class="btn kucuk ikincil">Aç</button></td>
+    </tr>`).join('') : '<tr><td colspan="8" class="bos">Kayıt bulunamadı.</td></tr>';
+}
+
+function isEmriAcModal(planId = ''){
+  const pl = planId ? D.plan.find(p => p['Plan ID'] === planId) : null;
+  modalAc('Yeni İş Emri', `
+    <div class="form-izgara">
+      <div class="alan">
+        <label>İşin Türü</label>
+        <select id="yTur" onchange="yeniTurDegisti()">
+          <option value="Planlı">Planlı Bakım</option>
+          <option value="Arızi">Arızi Onarım</option>
+        </select>
+      </div>
+      <div class="alan">
+        <label>Makine</label>
+        <select id="yMakine">
+          ${D.makineler.map(m => `<option value="${kacis(m['Makine Kodu'])}"${pl && pl['Makine Kodu']===m['Makine Kodu']?' selected':''}>${kacis(m['Makine Kodu'])} — ${kacis(m['Makine Adı'])}</option>`).join('')}
+        </select>
+      </div>
+      <div class="alan" id="yPeriyotAlan">
+        <label>Periyot</label>
+        <select id="yPeriyot"><option>6 Aylık</option></select>
+      </div>
+      <div class="alan">
+        <label>Hazırlayan</label>
+        <input id="yHazirlayan" value="${kacis(aktifPersonel())}">
+      </div>
+      <div class="alan">
+        <label>Planlanan Başlangıç</label>
+        <input type="date" id="yPlanBas" value="${pl ? String(pl['Planlanan Tarih']).substring(0,10) : D.bugun}">
+      </div>
+      <div class="alan">
+        <label>Planlanan Bitiş</label>
+        <input type="date" id="yPlanBit" value="${pl ? String(pl['Planlanan Tarih']).substring(0,10) : D.bugun}">
+      </div>
+      <div class="alan genis" id="yArizaAlan" style="display:none">
+        <label>Arıza Tanımı</label>
+        <textarea id="yAriza" placeholder="Arızanın belirtisi, ne zaman fark edildiği..."></textarea>
+      </div>
+    </div>
+    <p style="margin-top:13px;font-size:12.5px;color:var(--metin-2)">
+      Planlı bakımda checklist maddeleri makinenin bakım görevlerinden otomatik oluşturulur.
+    </p>`,
+    [{ metin:'İptal', sinif:'ikincil', tikla: modalKapat },
+     { metin:'İş Emri Aç', sinif:'', tikla: () => isEmriOlustur(planId) }]);
+}
+
+function yeniTurDegisti(){
+  const arizi = document.getElementById('yTur').value === 'Arızi';
+  document.getElementById('yArizaAlan').style.display = arizi ? '' : 'none';
+  document.getElementById('yPeriyotAlan').style.display = arizi ? 'none' : '';
+}
+
+async function isEmriOlustur(planId){
+  const tur = document.getElementById('yTur').value;
+  const p = {
+    tur, planId: tur === 'Planlı' ? planId : '',
+    makineKodu : document.getElementById('yMakine').value,
+    periyot    : tur === 'Planlı' ? document.getElementById('yPeriyot').value : '',
+    hazirlayan : document.getElementById('yHazirlayan').value,
+    planBas    : document.getElementById('yPlanBas').value,
+    planBit    : document.getElementById('yPlanBit').value,
+    arizaTanimi: tur === 'Arızi' ? document.getElementById('yAriza').value : ''
+  };
+  yukle(true, 'İş emri açılıyor...');
+  try {
+    const s = await api('isEmriAc', p);
+    modalKapat();
+    await veriYukle();
+    bildir(`${s.isEmriNo} açıldı${s.maddeAdedi ? ` — ${s.maddeAdedi} madde` : ''}`, 'basari');
+    isEmriAc(s.isEmriNo);
+  } catch (e) { bildir(e.message, 'hata'); }
+  finally { yukle(false); }
+}
+
+/** İş emri detay ekranı */
+function isEmriAc(no){
+  const i = D.isEmirleri.find(x => x['İş Emri No'] === no);
+  if (!i) return bildir('İş emri bulunamadı', 'hata');
+  aktifIsEmri = no;
+
+  const kapali = i['Durum'] === 'Kapalı';
+  const det = D.detaylar.filter(x => x['İş Emri No'] === no)
+    .sort((a,b) => (parseInt(a['Sıra'],10)||0) - (parseInt(b['Sıra'],10)||0));
+  const kul = D.kullanim.filter(x => x['İş Emri No'] === no);
+
+  const ro = kapali ? ' readonly' : '';
+  const dis = kapali ? ' disabled' : '';
+
+  let html = `
+    <div class="bolum">1 — İş Emri Bilgileri</div>
+    <div class="form-izgara">
+      <div class="alan"><label>İş Emri No</label><input value="${kacis(no)}" readonly></div>
+      <div class="alan"><label>İşin Türü</label><input value="${kacis(i['İşin Türü'])}${i['Periyot']?' — '+kacis(i['Periyot']):''}" readonly></div>
+      <div class="alan"><label>Makine</label><input value="${kacis(i['Makine Kodu'])} — ${kacis(makineAdi(i['Makine Kodu']))}" readonly></div>
+      <div class="alan"><label>Kayıt Tarihi</label><input value="${tarihTR(i['Kayıt Tarihi'])}" readonly></div>
+      <div class="alan"><label>Hazırlayan</label><input id="dHazirlayan" value="${kacis(i['Hazırlayan'])}"${ro}></div>
+      <div class="alan"><label>Bakımı Yapan</label><input id="dYapan" value="${kacis(i['Yapan'] || aktifPersonel())}"${ro}></div>
+    </div>`;
+
+  if (i['İşin Türü'] === 'Arızi') {
+    html += `<div class="alan genis" style="margin-top:13px">
+      <label>Arıza Tanımı</label>
+      <textarea id="dAriza"${ro}>${kacis(i['Arıza Tanımı'])}</textarea></div>`;
+  }
+
+  if (det.length) {
+    const dolu = det.filter(d => d['Sonuç']).length;
+    html += `<div class="bolum">2 — Yapılacak Faaliyetler
+      <span style="float:right;font-weight:600;text-transform:none;letter-spacing:0;color:var(--metin-2)">
+        ${dolu}/${det.length} tamamlandı</span></div>`;
+    if (!kapali) {
+      html += `<div style="margin-bottom:11px;display:flex;gap:7px;flex-wrap:wrap">
+        <button class="btn kucuk ikincil" onclick="hepsiniIsaretle('Uygun')">Tümünü Uygun İşaretle</button>
+        <button class="btn kucuk ikincil" onclick="hepsiniIsaretle('')">Temizle</button></div>`;
+    }
+    html += det.map(d => {
+      const s = d['Sonuç'] || '';
+      const sinif = s === 'Uygun' ? 'uygun' : s === 'Uygun Değil' ? 'uygundegil' : s === 'Yapılmadı' ? 'yapilmadi' : '';
+      return `<div class="madde ${sinif}" data-sira="${kacis(d['Sıra'])}">
+        <div class="madde-ust">
+          <div class="madde-no">${kacis(d['Sıra'])}</div>
+          <div class="madde-metin">${kacis(d['Faaliyet'])}</div>
+          ${d['Tip'] ? `<div class="madde-tip">${kacis(d['Tip'])}</div>` : ''}
+        </div>
+        <div class="madde-alt">
+          <div class="secenekler">
+            <label class="s-uygun"><input type="radio" name="sonuc${kacis(d['Sıra'])}" value="Uygun" ${s==='Uygun'?'checked':''}${dis} onchange="maddeDegisti(this)"><span>Uygun</span></label>
+            <label class="s-uygundegil"><input type="radio" name="sonuc${kacis(d['Sıra'])}" value="Uygun Değil" ${s==='Uygun Değil'?'checked':''}${dis} onchange="maddeDegisti(this)"><span>Uygun Değil</span></label>
+            <label class="s-yapilmadi"><input type="radio" name="sonuc${kacis(d['Sıra'])}" value="Yapılmadı" ${s==='Yapılmadı'?'checked':''}${dis} onchange="maddeDegisti(this)"><span>Yapılmadı</span></label>
+          </div>
+          <input class="not" placeholder="Not (varsa)" value="${kacis(d['Not'])}"${ro}>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  html += `
+    <div class="bolum">${det.length ? '3' : '2'} — Yapılan İşin Kaydı</div>
+    <div class="form-izgara">
+      <div class="alan"><label>Fiili Başlangıç</label>
+        <input type="datetime-local" id="dFiiliBas" value="${(i['Fiili Başlangıç']||'').replace(' ','T')}"${ro}></div>
+      <div class="alan"><label>Fiili Bitiş</label>
+        <input type="datetime-local" id="dFiiliBit" value="${(i['Fiili Bitiş']||'').replace(' ','T')}"${ro}></div>
+      <div class="alan"><label>Üretim Duruşu (dk)</label>
+        <input type="number" id="dDurus" value="${kacis(i['Duruş (dk)'])}" placeholder="0"${ro}></div>
+      <div class="alan"><label>Makine Çalışır Durumda mı?</label>
+        <select id="dCalisir"${dis}>
+          <option value="">Seçin...</option>
+          <option value="Evet"${i['Makine Çalışır mı']==='Evet'?' selected':''}>Evet</option>
+          <option value="Hayır"${i['Makine Çalışır mı']==='Hayır'?' selected':''}>Hayır</option>
+        </select></div>
+      <div class="alan genis"><label>Açıklamalar / Onarım Detayları / Kök Neden</label>
+        <textarea id="dAciklama"${ro}>${kacis(i['Açıklama / Kök Neden'])}</textarea></div>
+    </div>
+
+    <div class="bolum">${det.length ? '4' : '3'} — Kullanılan Yedek Parçalar</div>
+    <div class="tablo-sar"><table>
+      <thead><tr><th>Parça Kodu</th><th>Parça Adı</th><th>Tedarikçi</th><th>Miktar</th><th></th></tr></thead>
+      <tbody>${kul.length ? kul.map(k => `<tr>
+        <td>${kacis(k['Parça Kodu'])}</td><td>${kacis(k['Parça Adı'])}</td>
+        <td>${kacis(k['Tedarikçi'])}</td><td>${kacis(k['Miktar'])} ${kacis(k['Birim'])}</td>
+        <td style="text-align:right">${kapali ? '' :
+          `<button class="btn kucuk tehlike" onclick="parcaKullanimSil('${kacis(k['Kayıt ID'])}')">Sil</button>`}</td>
+      </tr>`).join('') : '<tr><td colspan="5" class="bos">Parça kullanılmadı.</td></tr>'}</tbody>
+    </table></div>
+    ${kapali ? '' : '<button class="btn kucuk ikincil" style="margin-top:10px" onclick="parcaEkleModal()">+ Parça Ekle</button>'}`;
+
+  if (kapali) {
+    html += `<div class="bolum">${det.length ? '5' : '4'} — Kapanış</div>
+      <dl class="bilgi">
+        <dt>Kapanış Tarihi</dt><dd>${tarihTR(i['Kapanış Tarihi'])}</dd>
+        <dt>Toplam Süre</dt><dd>${sureMetin(i['Süre (dk)'])}</dd>
+        <dt>Bakım Personeli Onayı</dt><dd>${kacis(i['Bakım Personeli Onayı'] || '-')}</dd>
+        <dt>Üretim Sorumlusu Onayı</dt><dd>${kacis(i['Üretim Sorumlusu Onayı'] || '-')}</dd>
+      </dl>`;
+  }
+
+  const butonlar = kapali
+    ? [{ metin:'Yazdır', sinif:'ikincil', tikla:() => isEmriYazdir(no) },
+       { metin:'Kapat', sinif:'ikincil', tikla: modalKapat }]
+    : [{ metin:'Sil', sinif:'tehlike', tikla:() => isEmriSil(no) },
+       { metin:'Yazdır', sinif:'ikincil', tikla:() => isEmriYazdir(no) },
+       { metin:'Kaydet', sinif:'ikincil', tikla:() => isEmriKaydet(no, false) },
+       { metin:'Kaydet ve Kapat', sinif:'yesil', tikla:() => isEmriKapatModal(no) }];
+
+  modalAc(`${no} — ${makineAdi(i['Makine Kodu'])}`, html, butonlar);
+}
+
+function maddeDegisti(radio){
+  const kutu = radio.closest('.madde');
+  kutu.className = 'madde ' + (radio.value === 'Uygun' ? 'uygun' :
+    radio.value === 'Uygun Değil' ? 'uygundegil' : 'yapilmadi');
+}
+
+function hepsiniIsaretle(deger){
+  document.querySelectorAll('#modalGovde .madde').forEach(m => {
+    const radios = m.querySelectorAll('input[type=radio]');
+    radios.forEach(r => r.checked = (deger && r.value === deger));
+    m.className = 'madde ' + (deger === 'Uygun' ? 'uygun' : '');
+  });
+}
+
+function detaylariTopla(){
+  return [...document.querySelectorAll('#modalGovde .madde')].map(m => {
+    const sec = m.querySelector('input[type=radio]:checked');
+    return { sira: m.dataset.sira, sonuc: sec ? sec.value : '',
+             not: m.querySelector('input.not').value };
+  });
+}
+
+function baslikTopla(){
+  const al = id => { const e = document.getElementById(id); return e ? e.value : ''; };
+  const b = {
+    'Hazırlayan'           : al('dHazirlayan'),
+    'Yapan'                : al('dYapan'),
+    'Fiili Başlangıç'      : al('dFiiliBas').replace('T',' '),
+    'Fiili Bitiş'          : al('dFiiliBit').replace('T',' '),
+    'Duruş (dk)'           : al('dDurus'),
+    'Makine Çalışır mı'    : al('dCalisir'),
+    'Açıklama / Kök Neden' : al('dAciklama')
+  };
+  if (document.getElementById('dAriza')) b['Arıza Tanımı'] = al('dAriza');
+  return b;
+}
+
+async function isEmriKaydet(no, sessiz){
+  yukle(true, 'Kaydediliyor...');
+  try {
+    await api('isEmriKaydet', { isEmriNo: no, baslik: baslikTopla(), detaylar: detaylariTopla() });
+    await veriYukle();
+    if (!sessiz) { bildir('Kaydedildi', 'basari'); isEmriAc(no); }
+  } catch (e) { bildir(e.message, 'hata'); }
+  finally { yukle(false); }
+}
+
+function isEmriKapatModal(no){
+  const baslik = baslikTopla();
+  const detaylar = detaylariTopla();
+  const eksik = detaylar.filter(d => !d.sonuc).length;
+  const uygunsuz = detaylar.filter(d => d.sonuc === 'Uygun Değil').length;
+
+  modalAc('İş Emrini Kapat', `
+    ${eksik ? `<div style="background:var(--amber-bg);border-left:3px solid var(--amber);padding:11px 14px;border-radius:7px;margin-bottom:15px;font-size:13px">
+      <strong>${eksik} madde işaretlenmemiş.</strong> Yine de kapatmak istediğinize emin misiniz?</div>` : ''}
+    ${uygunsuz ? `<div style="background:var(--kirmizi-bg);border-left:3px solid var(--kirmizi);padding:11px 14px;border-radius:7px;margin-bottom:15px;font-size:13px">
+      <strong>${uygunsuz} maddede uygunsuzluk tespit edildi.</strong> Gerekirse ayrıca arızi iş emri açın.</div>` : ''}
+    <div class="form-izgara">
+      <div class="alan"><label>Bakım Personeli Onayı</label>
+        <input id="kBakimOnay" value="${kacis(baslik['Yapan'] || aktifPersonel())}"></div>
+      <div class="alan"><label>Üretim Sorumlusu Onayı</label>
+        <input id="kUretimOnay" placeholder="Ad Soyad"></div>
+    </div>
+    <p style="margin-top:13px;font-size:12.5px;color:var(--metin-2)">
+      Kapatıldığında bağlı bakım planı satırı <strong>Yapıldı (Y)</strong> olarak işaretlenir
+      ve kayıt makinenin bakım geçmişine düşer.</p>`,
+    [{ metin:'Vazgeç', sinif:'ikincil', tikla:() => isEmriAc(no) },
+     { metin:'Onayla ve Kapat', sinif:'yesil', tikla: async () => {
+        baslik['Bakım Personeli Onayı'] = document.getElementById('kBakimOnay').value;
+        baslik['Üretim Sorumlusu Onayı'] = document.getElementById('kUretimOnay').value;
+        yukle(true, 'İş emri kapatılıyor...');
+        try {
+          await api('isEmriKapat', { isEmriNo: no, baslik, detaylar });
+          modalKapat(); await veriYukle();
+          bildir(no + ' kapatıldı', 'basari');
+        } catch (e) { bildir(e.message, 'hata'); }
+        finally { yukle(false); }
+     }}], true);
+}
+
+async function isEmriSil(no){
+  if (!confirm(`${no} numaralı iş emri ve tüm checklist kayıtları silinecek. Emin misiniz?`)) return;
+  yukle(true, 'Siliniyor...');
+  try {
+    await api('isEmriSil', { isEmriNo: no });
+    modalKapat(); await veriYukle();
+    bildir(no + ' silindi', 'basari');
+  } catch (e) { bildir(e.message, 'hata'); }
+  finally { yukle(false); }
+}
+
+/* ---- Parça kullanımı ---- */
+function parcaEkleModal(){
+  const i = D.isEmirleri.find(x => x['İş Emri No'] === aktifIsEmri);
+  const uygun = D.parcalar.filter(p => !p['Makine Kodu'] || p['Makine Kodu'] === i['Makine Kodu']);
+  const digerleri = D.parcalar.filter(p => p['Makine Kodu'] && p['Makine Kodu'] !== i['Makine Kodu']);
+
+  modalAc('Parça Ekle', `
+    <div class="form-izgara">
+      <div class="alan genis"><label>Parça</label>
+        <select id="pkKod">
+          <optgroup label="Bu makineye ait">
+            ${uygun.map(p => `<option value="${kacis(p['Parça Kodu'])}">${kacis(p['Parça Kodu'])} — ${kacis(p['Parça Adı'])} (stok: ${kacis(p['Stok Miktar'])})</option>`).join('')}
+          </optgroup>
+          ${digerleri.length ? `<optgroup label="Diğer parçalar">
+            ${digerleri.map(p => `<option value="${kacis(p['Parça Kodu'])}">${kacis(p['Parça Kodu'])} — ${kacis(p['Parça Adı'])}</option>`).join('')}
+          </optgroup>` : ''}
+        </select></div>
+      <div class="alan"><label>Miktar</label>
+        <input type="number" id="pkMiktar" value="1" min="0" step="0.01"></div>
+    </div>
+    <p style="margin-top:13px;font-size:12.5px;color:var(--metin-2)">
+      Kaydedildiğinde yedek parça stoğundan otomatik düşülür.</p>`,
+    [{ metin:'Vazgeç', sinif:'ikincil', tikla:() => isEmriAc(aktifIsEmri) },
+     { metin:'Ekle', sinif:'', tikla: async () => {
+        const kod = document.getElementById('pkKod').value;
+        const miktar = document.getElementById('pkMiktar').value;
+        const p = D.parcalar.find(x => x['Parça Kodu'] === kod);
+        yukle(true, 'Ekleniyor...');
+        try {
+          await api('parcaKullan', { kullanim: {
+            'İş Emri No':aktifIsEmri, 'Parça Kodu':kod, 'Parça Adı':p['Parça Adı'],
+            'Tedarikçi':p['Tedarikçi'], 'Makine Kodu':i['Makine Kodu'],
+            'Miktar':miktar, 'Birim':p['Birim'] }});
+          await veriYukle(); isEmriAc(aktifIsEmri);
+          bildir('Parça eklendi', 'basari');
+        } catch (e) { bildir(e.message, 'hata'); }
+        finally { yukle(false); }
+     }}], true);
+}
+
+async function parcaKullanimSil(kayitId){
+  yukle(true, 'Siliniyor...');
+  try {
+    await api('parcaKullanimSil', { kayitId });
+    await veriYukle(); isEmriAc(aktifIsEmri);
+    bildir('Parça kaydı silindi, stok geri eklendi', 'basari');
+  } catch (e) { bildir(e.message, 'hata'); }
+  finally { yukle(false); }
+}
+
+/* ---- Yazdırma ---- */
+function isEmriYazdir(no){
+  const i = D.isEmirleri.find(x => x['İş Emri No'] === no);
+  const m = D.makineler.find(x => x['Makine Kodu'] === i['Makine Kodu']) || {};
+  const det = D.detaylar.filter(x => x['İş Emri No'] === no)
+    .sort((a,b) => (parseInt(a['Sıra'],10)||0) - (parseInt(b['Sıra'],10)||0));
+  const kul = D.kullanim.filter(x => x['İş Emri No'] === no);
+  const firma = (D.ayarlar.find(a => a['Anahtar']==='firma') || {})['Değer'] || '';
+
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
+  <title>${kacis(no)}</title><style>
+    body{font-family:Arial,sans-serif;font-size:11px;color:#000;padding:18px;max-width:780px;margin:0 auto}
+    h1{font-size:15px;text-align:center;margin-bottom:3px}
+    .firma{text-align:center;font-size:10px;color:#444;margin-bottom:14px}
+    table{width:100%;border-collapse:collapse;margin-bottom:13px}
+    td,th{border:1px solid #666;padding:5px 7px;vertical-align:top}
+    th{background:#E8EAF0;font-weight:bold;text-align:left}
+    .bas{background:#1F3864;color:#fff;font-weight:bold;padding:5px 7px;margin:13px 0 7px;font-size:11px}
+    .kutucuk{display:inline-block;width:11px;height:11px;border:1px solid #000;text-align:center;line-height:11px;font-size:9px}
+    .imza{margin-top:26px;display:flex;gap:40px}
+    .imza div{flex:1;border-top:1px solid #000;padding-top:5px;text-align:center;font-size:10px}
+    @media print{body{padding:0}}
+  </style></head><body>
+  <h1>BAKIM ONARIM İŞ EMRİ FORMU</h1>
+  <div class="firma">${kacis(firma)}</div>
+  <table>
+    <tr><th width="28%">İş Emri No</th><td width="30%">${kacis(no)}</td>
+        <th width="20%">Kayıt Tarihi</th><td>${tarihTR(i['Kayıt Tarihi'])}</td></tr>
+    <tr><th>İşin Türü</th><td colspan="3">
+        <span class="kutucuk">${i['İşin Türü']==='Planlı'?'X':''}</span> ${kacis(i['Periyot']||'')} Planlı Bakım
+        &nbsp;&nbsp; <span class="kutucuk">${i['İşin Türü']==='Arızi'?'X':''}</span> Arızi Onarım</td></tr>
+    <tr><th>Makine Kodu / Adı</th><td colspan="3">${kacis(i['Makine Kodu'])} — ${kacis(m['Makine Adı']||'')}</td></tr>
+    <tr><th>Bölüm</th><td>${kacis(m['Bölüm']||'')}</td><th>Kritiklik</th><td>${kacis(m['Kritiklik']||'')}</td></tr>
+    <tr><th>Planlanan Başlangıç</th><td>${tarihTR(i['Planlanan Başlangıç'])}</td>
+        <th>Planlanan Bitiş</th><td>${tarihTR(i['Planlanan Bitiş'])}</td></tr>
+    <tr><th>Hazırlayan</th><td>${kacis(i['Hazırlayan'])}</td>
+        <th>Bakımı Yapan</th><td>${kacis(i['Yapan'])}</td></tr>
+  </table>
+  ${i['Arıza Tanımı'] ? `<div class="bas">ARIZA TANIMI</div>
+    <table><tr><td style="height:36px">${kacis(i['Arıza Tanımı'])}</td></tr></table>` : ''}
+  ${det.length ? `<div class="bas">1 — YAPILACAK FAALİYETLER</div>
+  <table><thead><tr><th width="24">No</th><th>Faaliyet</th><th width="80">Sonuç</th><th width="120">Not</th></tr></thead>
+  <tbody>${det.map(d => `<tr><td>${kacis(d['Sıra'])}</td><td>${kacis(d['Faaliyet'])}</td>
+    <td>${kacis(d['Sonuç']||'')}</td><td>${kacis(d['Not']||'')}</td></tr>`).join('')}</tbody></table>` : ''}
+  <div class="bas">${det.length?'2':'1'} — YAPILAN FAALİYETLERİN KAYDI</div>
+  <table>
+    <tr><th width="28%">Fiili Başlama</th><td width="30%">${kacis(i['Fiili Başlangıç']||'-')}</td>
+        <th width="20%">Fiili Bitiş</th><td>${kacis(i['Fiili Bitiş']||'-')}</td></tr>
+    <tr><th>Toplam Çalışma Süresi</th><td>${sureMetin(i['Süre (dk)'])}</td>
+        <th>Üretim Duruşu</th><td>${sureMetin(i['Duruş (dk)'])}</td></tr>
+  </table>
+  <table><thead><tr><th colspan="4">Kullanılan Yedek Parça / Malzemeler</th></tr>
+    <tr><th width="26%">Tedarikçi</th><th width="30%">Parça Kodu</th><th>Parça Adı</th><th width="60">Miktar</th></tr></thead>
+    <tbody>${kul.length ? kul.map(k => `<tr><td>${kacis(k['Tedarikçi'])}</td><td>${kacis(k['Parça Kodu'])}</td>
+      <td>${kacis(k['Parça Adı'])}</td><td>${kacis(k['Miktar'])} ${kacis(k['Birim'])}</td></tr>`).join('')
+      : '<tr><td colspan="4" style="height:26px"></td></tr>'}</tbody></table>
+  <table><thead><tr><th>Açıklamalar / Onarım Detayları / Kök Neden</th></tr></thead>
+    <tbody><tr><td style="height:60px">${kacis(i['Açıklama / Kök Neden']||'')}</td></tr></tbody></table>
+  <div class="bas">${det.length?'3':'2'} — KAPATMA VE ONAY</div>
+  <table><tr><th width="40%">Makine Çalışır Durumda mı?</th><td>
+    <span class="kutucuk">${i['Makine Çalışır mı']==='Evet'?'X':''}</span> Evet
+    &nbsp;&nbsp; <span class="kutucuk">${i['Makine Çalışır mı']==='Hayır'?'X':''}</span> Hayır</td></tr></table>
+  <div class="imza">
+    <div>Bakım Personeli Onayı<br><br>${kacis(i['Bakım Personeli Onayı']||'')}</div>
+    <div>Üretim Sorumlusu Onayı<br><br>${kacis(i['Üretim Sorumlusu Onayı']||'')}</div>
+  </div>
+  </body></html>`);
+  w.document.close();
+  setTimeout(() => w.print(), 350);
+}
+
+/* =================================================================
+   BAKIM PLANI
+   ================================================================= */
+function planListele(){
+  const yil = document.getElementById('fPlanYil').value;
+  document.getElementById('planBaslik').textContent = `${yil} Yıllık Periyodik Bakım Planı`;
+  const plan = D.plan.filter(p => String(p['Yıl']) === String(yil));
+
+  // Takvim: makine + periyot kırılımında satır
+  const gruplar = {};
+  plan.forEach(p => {
+    const k = p['Makine Kodu'] + '|' + p['Periyot'];
+    if (!gruplar[k]) gruplar[k] = { kod:p['Makine Kodu'], periyot:p['Periyot'], aylar:{} };
+    const ay = parseInt(String(p['Planlanan Tarih']).substring(5,7), 10);
+    gruplar[k].aylar[ay] = p;
+  });
+
+  const satirlar = Object.values(gruplar);
+  document.getElementById('planTakvim').innerHTML = satirlar.length ? satirlar.map(g => {
+    let hucreler = '';
+    for (let a = 1; a <= 12; a++) {
+      const p = g.aylar[a];
+      if (!p) { hucreler += '<td class="ay"></td>'; continue; }
+      let d = p['Durum'] || 'P', harf = d;
+      if (d === 'P') {
+        if (p['İş Emri No']) { harf = 'İ'; }
+        else {
+          const f = gunFark(p['Planlanan Tarih']);
+          if (f !== null && f < 0) { d = 'G'; harf = '!'; }
+        }
+      }
+      hucreler += `<td class="ay" onclick="planDuzenle('${kacis(p['Plan ID'])}')" title="${tarihTR(p['Planlanan Tarih'])}">
+        <span class="hucre ${d.toLowerCase()}">${harf}</span></td>`;
+    }
+    return `<tr>
+      <td><strong>${kacis(g.kod)}</strong></td>
+      <td>${kacis(makineAdi(g.kod))}</td>
+      <td>${kacis(g.periyot)}</td>
+      ${hucreler}</tr>`;
+  }).join('') : '<tr><td colspan="15" class="bos">Bu yıl için plan satırı yok. "Yıllık Plan Üret" ile oluşturabilirsiniz.</td></tr>';
+
+  // Detay tablosu
+  const sirali = [...plan].sort((a,b) =>
+    String(a['Planlanan Tarih']).localeCompare(String(b['Planlanan Tarih'])));
+  document.getElementById('planTablo').innerHTML = sirali.length ? sirali.map(p => {
+    const f = gunFark(p['Planlanan Tarih']);
+    let rozet;
+    if (p['Durum'] === 'Y')       rozet = '<span class="rozet yesil">Yapıldı</span>';
+    else if (p['Durum'] === 'E')  rozet = '<span class="rozet amber">Ertelendi</span>';
+    else if (p['İş Emri No'])     rozet = '<span class="rozet mavi">İşlemde</span>';
+    else if (f !== null && f < 0) rozet = `<span class="rozet kirmizi">Gecikmiş (${-f} gün)</span>`;
+    else                          rozet = '<span class="rozet mavi">Planlandı</span>';
+    return `<tr>
+      <td>${kacis(p['Plan ID'])}</td>
+      <td><strong>${kacis(p['Makine Kodu'])}</strong> — ${kacis(makineAdi(p['Makine Kodu']))}</td>
+      <td>${kacis(p['Periyot'])}</td>
+      <td>${tarihTR(p['Planlanan Tarih'])}</td>
+      <td>${rozet}</td>
+      <td>${p['İş Emri No'] ? `<a href="#" onclick="isEmriAc('${kacis(p['İş Emri No'])}');return false" style="color:var(--mavi)">${kacis(p['İş Emri No'])}</a>` : '—'}</td>
+      <td>${tarihTR(p['Gerçekleşen Tarih'])}</td>
+      <td style="text-align:right">
+        <button class="btn kucuk ikincil" onclick="planDuzenle('${kacis(p['Plan ID'])}')">Düzenle</button>
+        ${p['İş Emri No'] || p['Durum']==='Y' ? '' :
+          `<button class="btn kucuk" style="margin-left:5px" onclick="isEmriAcModal('${kacis(p['Plan ID'])}')">İş Emri</button>`}
+      </td></tr>`;
+  }).join('') : '<tr><td colspan="8" class="bos">Kayıt yok.</td></tr>';
+}
+
+function planDuzenle(planId){
+  const p = D.plan.find(x => x['Plan ID'] === planId);
+  if (!p) return;
+  modalAc('Plan Satırı — ' + planId, `
+    <div class="form-izgara">
+      <div class="alan"><label>Makine</label>
+        <select id="plMakine">${D.makineler.map(m => `<option value="${kacis(m['Makine Kodu'])}"${m['Makine Kodu']===p['Makine Kodu']?' selected':''}>${kacis(m['Makine Kodu'])} — ${kacis(m['Makine Adı'])}</option>`).join('')}</select></div>
+      <div class="alan"><label>Periyot</label><input id="plPeriyot" value="${kacis(p['Periyot'])}"></div>
+      <div class="alan"><label>Planlanan Tarih</label>
+        <input type="date" id="plTarih" value="${String(p['Planlanan Tarih']).substring(0,10)}"></div>
+      <div class="alan"><label>Durum</label>
+        <select id="plDurum">
+          <option value="P"${p['Durum']==='P'?' selected':''}>P — Planlanan</option>
+          <option value="Y"${p['Durum']==='Y'?' selected':''}>Y — Yapıldı</option>
+          <option value="E"${p['Durum']==='E'?' selected':''}>E — Ertelendi</option>
+        </select></div>
+      <div class="alan"><label>Gerçekleşen Tarih</label>
+        <input type="date" id="plGercek" value="${String(p['Gerçekleşen Tarih']||'').substring(0,10)}"></div>
+      <div class="alan genis"><label>Erteleme Gerekçesi</label>
+        <input id="plGerekce" value="${kacis(p['Erteleme Gerekçesi'])}"></div>
+    </div>`,
+    [{ metin:'Sil', sinif:'tehlike', tikla: async () => {
+        if (!confirm('Plan satırı silinecek. Emin misiniz?')) return;
+        yukle(true); try { await api('planSil',{planId}); modalKapat(); await veriYukle(); bildir('Silindi','basari'); }
+        catch(e){ bildir(e.message,'hata'); } finally { yukle(false); }
+     }},
+     { metin:'İptal', sinif:'ikincil', tikla: modalKapat },
+     { metin:'Kaydet', sinif:'', tikla: async () => {
+        const yeni = {
+          'Plan ID':planId,
+          'Makine Kodu':document.getElementById('plMakine').value,
+          'Periyot':document.getElementById('plPeriyot').value,
+          'Yıl':document.getElementById('plTarih').value.substring(0,4),
+          'Planlanan Tarih':document.getElementById('plTarih').value,
+          'Durum':document.getElementById('plDurum').value,
+          'Gerçekleşen Tarih':document.getElementById('plGercek').value,
+          'Erteleme Gerekçesi':document.getElementById('plGerekce').value
+        };
+        yukle(true); try { await api('planKaydet',{plan:yeni}); modalKapat(); await veriYukle(); bildir('Kaydedildi','basari'); }
+        catch(e){ bildir(e.message,'hata'); } finally { yukle(false); }
+     }}], true);
+}
+
+function planUretModal(){
+  const yil = new Date().getFullYear();
+  modalAc('Yıllık Plan Üret', `
+    <div class="form-izgara">
+      <div class="alan"><label>Yıl</label>
+        <input type="number" id="puYil" value="${yil + 1}" min="2020" max="2100"></div>
+      <div class="alan"><label>Periyot</label>
+        <select id="puPeriyot"><option>6 Aylık</option><option>Yıllık</option><option>3 Aylık</option><option>Aylık</option></select></div>
+      <div class="alan"><label>Ayın Kaçında</label>
+        <input type="number" id="puGun" value="15" min="1" max="28"></div>
+    </div>
+    <div class="alan genis" style="margin-top:14px">
+      <label>Bakım Ayları</label>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:7px;margin-top:5px">
+        ${AYLAR.map((a,i) => `<label style="display:flex;align-items:center;gap:6px;font-size:13px;border:1px solid var(--gri-3);border-radius:6px;padding:7px 9px;cursor:pointer">
+          <input type="checkbox" class="puAy" value="${i+1}" ${(i+1===6||i+1===12)?'checked':''}> ${a}</label>`).join('')}
+      </div>
+    </div>
+    <p style="margin-top:14px;font-size:12.5px;color:var(--metin-2)">
+      Aktif tüm makineler için seçilen aylara plan satırı açılır. Aynı tarihte satır varsa atlanır.</p>`,
+    [{ metin:'İptal', sinif:'ikincil', tikla: modalKapat },
+     { metin:'Üret', sinif:'', tikla: async () => {
+        const aylar = [...document.querySelectorAll('.puAy:checked')].map(c => parseInt(c.value,10));
+        if (!aylar.length) return bildir('En az bir ay seçin', 'hata');
+        yukle(true, 'Plan üretiliyor...');
+        try {
+          const s = await api('planUret', {
+            yil: document.getElementById('puYil').value,
+            periyot: document.getElementById('puPeriyot').value,
+            gun: parseInt(document.getElementById('puGun').value,10),
+            aylar
+          });
+          modalKapat(); await veriYukle();
+          bildir(`${s.eklenen} plan satırı oluşturuldu`, 'basari');
+        } catch (e) { bildir(e.message, 'hata'); }
+        finally { yukle(false); }
+     }}]);
+}
+
+/* =================================================================
+   MAKİNELER
+   ================================================================= */
+function makineListele(){
+  const ara = document.getElementById('fMakineAra').value.toLowerCase();
+  let liste = D.makineler;
+  if (ara) liste = liste.filter(m =>
+    Object.values(m).join(' ').toLowerCase().includes(ara));
+
+  document.getElementById('makineTablo').innerHTML = liste.length ? liste.map(m => {
+    const kapali = D.isEmirleri.filter(i =>
+      i['Makine Kodu'] === m['Makine Kodu'] && i['Durum'] === 'Kapalı');
+    const son = kapali.map(i => i['Kapanış Tarihi'] || i['Kayıt Tarihi']).sort().pop();
+    const kr = m['Kritiklik'];
+    return `<tr class="tiklanir" onclick="makineDetay('${kacis(m['Makine Kodu'])}')">
+      <td><strong>${kacis(m['Makine Kodu'])}</strong></td>
+      <td>${kacis(m['Makine Adı'])}</td>
+      <td>${kacis(m['Marka / Model'] || '—')}</td>
+      <td>${kacis(m['Bölüm'])}</td>
+      <td><span class="rozet ${kr==='A'?'kirmizi':kr==='B'?'amber':'gri'}">${kacis(kr)}</span></td>
+      <td>${kacis(m['Sorumlu Operatör'])}</td>
+      <td>${tarihTR(son)}</td>
+      <td><span class="rozet ${m['Durum']==='Aktif'?'yesil':'gri'}">${kacis(m['Durum'])}</span></td>
+      <td style="text-align:right"><button class="btn kucuk ikincil">Sicil Kartı</button></td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="9" class="bos">Makine bulunamadı.</td></tr>';
+}
+
+function makineDetay(kod){
+  const m = D.makineler.find(x => x['Makine Kodu'] === kod);
+  if (!m) return;
+  const gorevler = D.gorevler.filter(g => g['Makine Kodu'] === kod);
+  const parcalar = D.parcalar.filter(p => p['Makine Kodu'] === kod);
+  const gecmis = D.isEmirleri.filter(i => i['Makine Kodu'] === kod)
+    .sort((a,b) => String(b['Kayıt Tarihi']).localeCompare(String(a['Kayıt Tarihi'])));
+
+  modalAc(`${kod} — Sicil Kartı`, `
+    <div class="bolum">1 — Makine Kimlik Bilgileri</div>
+    <dl class="bilgi">
+      <dt>Makine Adı</dt><dd>${kacis(m['Makine Adı'])}</dd>
+      <dt>Makine Kodu</dt><dd>${kacis(m['Makine Kodu'])}</dd>
+      <dt>Marka / Model</dt><dd>${kacis(m['Marka / Model'] || '—')}</dd>
+      <dt>Seri No</dt><dd>${kacis(m['Seri No'] || '—')}</dd>
+      <dt>Üretici / Tedarikçi</dt><dd>${kacis(m['Üretici / Tedarikçi'] || '—')}</dd>
+      <dt>Kurulum Tarihi</dt><dd>${tarihTR(m['Kurulum Tarihi'])}</dd>
+      <dt>Bulunduğu Bölüm</dt><dd>${kacis(m['Bölüm'])}</dd>
+      <dt>Kritiklik Seviyesi</dt><dd>${kacis(m['Kritiklik'])}</dd>
+      <dt>Sorumlu Operatör</dt><dd>${kacis(m['Sorumlu Operatör'])}</dd>
+      <dt>Bakım Talimatı</dt><dd>${kacis(m['Bakım Talimat Kodu'] || '—')}</dd>
+      ${m['Notlar'] ? `<dt>Notlar</dt><dd>${kacis(m['Notlar'])}</dd>` : ''}
+    </dl>
+
+    <div class="bolum">2 — Parça Listesi</div>
+    <div class="tablo-sar"><table>
+      <thead><tr><th>Parça Adı</th><th>Kod</th><th>Tedarikçi</th><th>Makinede</th><th>Stok</th></tr></thead>
+      <tbody>${parcalar.length ? parcalar.map(p => `<tr>
+        <td>${kacis(p['Parça Adı'])}</td><td>${kacis(p['Parça Kodu'])}</td>
+        <td>${kacis(p['Tedarikçi']||'—')}</td>
+        <td>${kacis(p['Makinedeki Miktar'])} ${kacis(p['Birim'])}</td>
+        <td>${(parseFloat(p['Stok Miktar'])||0) < (parseFloat(p['Min Stok'])||0)
+          ? `<span class="rozet kirmizi">${kacis(p['Stok Miktar'])} ${kacis(p['Birim'])}</span>`
+          : `${kacis(p['Stok Miktar'])} ${kacis(p['Birim'])}`}</td>
+      </tr>`).join('') : '<tr><td colspan="5" class="bos">Parça tanımlı değil.</td></tr>'}</tbody>
+    </table></div>
+
+    <div class="bolum">3 — Bakım ve Onarım Geçmişi</div>
+    <div class="tablo-sar"><table>
+      <thead><tr><th>Tarih</th><th>Tür</th><th>Açıklama</th><th>İş Emri No</th><th>Yapan</th></tr></thead>
+      <tbody>${gecmis.length ? gecmis.map(i => `<tr class="tiklanir" onclick="isEmriAc('${kacis(i['İş Emri No'])}')">
+        <td>${tarihTR(i['Kapanış Tarihi'] || i['Kayıt Tarihi'])}</td>
+        <td><span class="rozet ${i['İşin Türü']==='Arızi'?'kirmizi':'mavi'}">${kacis(i['İşin Türü'])}</span></td>
+        <td>${kacis(i['Açıklama / Kök Neden'] || i['Arıza Tanımı'] || i['Periyot'] + ' planlı bakım')}</td>
+        <td>${kacis(i['İş Emri No'])}</td>
+        <td>${kacis(i['Yapan'] || i['Hazırlayan'] || '—')}</td>
+      </tr>`).join('') : '<tr><td colspan="5" class="bos">Bakım kaydı yok.</td></tr>'}</tbody>
+    </table></div>
+
+    <div class="bolum">4 — Bakım Görevleri (${gorevler.length} madde)</div>
+    <div class="tablo-sar"><table>
+      <thead><tr><th width="40">No</th><th>Faaliyet</th><th width="90">Periyot</th><th width="90">Tip</th></tr></thead>
+      <tbody>${gorevler.length ? gorevler.map(g => `<tr>
+        <td>${kacis(g['Sıra'])}</td><td>${kacis(g['Faaliyet'])}</td>
+        <td>${kacis(g['Periyot'])}</td><td>${kacis(g['Tip'])}</td>
+      </tr>`).join('') : '<tr><td colspan="4" class="bos">Görev tanımlı değil.</td></tr>'}</tbody>
+    </table></div>`,
+    [{ metin:'Düzenle', sinif:'ikincil', tikla:() => makineDuzenle(kod) },
+     { metin:'Arızi İş Emri Aç', sinif:'', tikla:() => { modalKapat(); setTimeout(() => {
+        isEmriAcModal(); document.getElementById('yTur').value = 'Arızi';
+        document.getElementById('yMakine').value = kod; yeniTurDegisti(); }, 60); }},
+     { metin:'Kapat', sinif:'ikincil', tikla: modalKapat }]);
+}
+
+function makineDuzenle(kod = ''){
+  const m = kod ? D.makineler.find(x => x['Makine Kodu'] === kod) : {};
+  const g = a => kacis(m[a] || '');
+  modalAc(kod ? 'Makine Düzenle — ' + kod : 'Yeni Makine', `
+    <div class="form-izgara">
+      <div class="alan"><label>Makine Kodu *</label>
+        <input id="mkKod" value="${g('Makine Kodu')}" ${kod?'readonly':''} placeholder="PRE-05"></div>
+      <div class="alan"><label>Makine Adı *</label><input id="mkAd" value="${g('Makine Adı')}"></div>
+      <div class="alan"><label>Marka / Model</label><input id="mkMarka" value="${g('Marka / Model')}"></div>
+      <div class="alan"><label>Seri No</label><input id="mkSeri" value="${g('Seri No')}"></div>
+      <div class="alan"><label>Üretici / Tedarikçi</label><input id="mkUretici" value="${g('Üretici / Tedarikçi')}"></div>
+      <div class="alan"><label>Kurulum Tarihi</label>
+        <input type="date" id="mkKurulum" value="${String(m['Kurulum Tarihi']||'').substring(0,10)}"></div>
+      <div class="alan"><label>Bulunduğu Bölüm</label><input id="mkBolum" value="${g('Bölüm') || 'Hidrolik Hortum Üretim Sahası'}"></div>
+      <div class="alan"><label>Kritiklik</label>
+        <select id="mkKritik">
+          <option value="A"${m['Kritiklik']==='A'?' selected':''}>A — Çok Kritik (üretim tamamen durur)</option>
+          <option value="B"${m['Kritiklik']==='B'?' selected':''}>B — Orta Kritik (üretim aksar)</option>
+          <option value="C"${m['Kritiklik']==='C'?' selected':''}>C — Az Kritik</option>
+        </select></div>
+      <div class="alan"><label>Sorumlu Operatör</label><input id="mkOperator" value="${g('Sorumlu Operatör')}"></div>
+      <div class="alan"><label>Bakım Talimat Kodu</label><input id="mkTalimat" value="${g('Bakım Talimat Kodu')}"></div>
+      <div class="alan"><label>Durum</label>
+        <select id="mkDurum">
+          <option value="Aktif"${m['Durum']!=='Pasif'?' selected':''}>Aktif</option>
+          <option value="Pasif"${m['Durum']==='Pasif'?' selected':''}>Pasif</option>
+        </select></div>
+      <div class="alan genis"><label>Fotoğraf URL</label><input id="mkFoto" value="${g('Foto URL')}" placeholder="https://..."></div>
+      <div class="alan genis"><label>Notlar</label><textarea id="mkNot">${g('Notlar')}</textarea></div>
+    </div>`,
+    [...(kod ? [{ metin:'Sil', sinif:'tehlike', tikla: async () => {
+        if (!confirm(`${kod} silinecek. Bakım görevleri ve geçmişi kalır. Emin misiniz?`)) return;
+        yukle(true); try { await api('makineSil',{kod}); modalKapat(); await veriYukle(); bildir('Silindi','basari'); }
+        catch(e){ bildir(e.message,'hata'); } finally { yukle(false); }
+     }}] : []),
+     { metin:'İptal', sinif:'ikincil', tikla: modalKapat },
+     { metin:'Kaydet', sinif:'', tikla: async () => {
+        const yeni = {
+          'Makine Kodu':document.getElementById('mkKod').value.trim(),
+          'Makine Adı':document.getElementById('mkAd').value.trim(),
+          'Marka / Model':document.getElementById('mkMarka').value,
+          'Seri No':document.getElementById('mkSeri').value,
+          'Üretici / Tedarikçi':document.getElementById('mkUretici').value,
+          'Kurulum Tarihi':document.getElementById('mkKurulum').value,
+          'Bölüm':document.getElementById('mkBolum').value,
+          'Kritiklik':document.getElementById('mkKritik').value,
+          'Sorumlu Operatör':document.getElementById('mkOperator').value,
+          'Bakım Talimat Kodu':document.getElementById('mkTalimat').value,
+          'Durum':document.getElementById('mkDurum').value,
+          'Foto URL':document.getElementById('mkFoto').value,
+          'Notlar':document.getElementById('mkNot').value
+        };
+        if (!yeni['Makine Kodu'] || !yeni['Makine Adı'])
+          return bildir('Makine kodu ve adı zorunlu', 'hata');
+        yukle(true); try { await api('makineKaydet',{makine:yeni}); modalKapat(); await veriYukle(); bildir('Kaydedildi','basari'); }
+        catch(e){ bildir(e.message,'hata'); } finally { yukle(false); }
+     }}], true);
+}
+
+/* =================================================================
+   YEDEK PARÇA
+   ================================================================= */
+function parcaListele(){
+  const ara = document.getElementById('fParcaAra').value.toLowerCase();
+  const mak = document.getElementById('fParcaMakine').value;
+  const krt = document.getElementById('fParcaKritik').checked;
+
+  let liste = D.parcalar;
+  if (mak) liste = liste.filter(p => p['Makine Kodu'] === mak);
+  if (krt) liste = liste.filter(p => (parseFloat(p['Stok Miktar'])||0) < (parseFloat(p['Min Stok'])||0));
+  if (ara) liste = liste.filter(p =>
+    (p['Parça Kodu'] + ' ' + p['Parça Adı'] + ' ' + p['Tedarikçi']).toLowerCase().includes(ara));
+
+  document.getElementById('parcaTablo').innerHTML = liste.length ? liste.map(p => {
+    const stok = parseFloat(p['Stok Miktar'])||0, min = parseFloat(p['Min Stok'])||0;
+    return `<tr class="tiklanir" onclick="parcaDuzenle('${kacis(p['Parça Kodu'])}')">
+      <td><strong>${kacis(p['Parça Kodu'])}</strong></td>
+      <td>${kacis(p['Parça Adı'])}</td>
+      <td>${kacis(p['Tedarikçi'] || '—')}</td>
+      <td>${kacis(p['Makine Kodu'] || '—')}</td>
+      <td>${kacis(p['Makinedeki Miktar'])} ${kacis(p['Birim'])}</td>
+      <td>${stok < min ? `<span class="rozet kirmizi">${stok} ${kacis(p['Birim'])}</span>` : `${stok} ${kacis(p['Birim'])}`}</td>
+      <td>${min} ${kacis(p['Birim'])}</td>
+      <td style="text-align:right"><button class="btn kucuk ikincil">Düzenle</button></td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="8" class="bos">Parça bulunamadı.</td></tr>';
+}
+
+function parcaDuzenle(kod = ''){
+  const p = kod ? D.parcalar.find(x => x['Parça Kodu'] === kod) : {};
+  const g = a => kacis(p[a] || '');
+  modalAc(kod ? 'Parça Düzenle' : 'Yeni Yedek Parça', `
+    <div class="form-izgara">
+      <div class="alan"><label>Parça Kodu *</label>
+        <input id="paKod" value="${g('Parça Kodu')}" ${kod?'readonly':''}></div>
+      <div class="alan"><label>Parça Adı *</label><input id="paAd" value="${g('Parça Adı')}"></div>
+      <div class="alan"><label>Tedarikçi</label><input id="paTedarikci" value="${g('Tedarikçi')}"></div>
+      <div class="alan"><label>Makine</label>
+        <select id="paMakine"><option value="">— Genel —</option>
+          ${D.makineler.map(m => `<option value="${kacis(m['Makine Kodu'])}"${m['Makine Kodu']===p['Makine Kodu']?' selected':''}>${kacis(m['Makine Kodu'])} — ${kacis(m['Makine Adı'])}</option>`).join('')}
+        </select></div>
+      <div class="alan"><label>Makinedeki Miktar</label>
+        <input type="number" id="paMakinede" value="${g('Makinedeki Miktar')||0}" step="0.01"></div>
+      <div class="alan"><label>Stok Miktar</label>
+        <input type="number" id="paStok" value="${g('Stok Miktar')||0}" step="0.01"></div>
+      <div class="alan"><label>Minimum Stok</label>
+        <input type="number" id="paMin" value="${g('Min Stok')||0}" step="0.01"></div>
+      <div class="alan"><label>Birim</label><input id="paBirim" value="${g('Birim')||'AD'}"></div>
+      <div class="alan genis"><label>Notlar</label><textarea id="paNot">${g('Notlar')}</textarea></div>
+    </div>`,
+    [...(kod ? [{ metin:'Sil', sinif:'tehlike', tikla: async () => {
+        if (!confirm(`${kod} silinecek. Emin misiniz?`)) return;
+        yukle(true); try { await api('parcaSil',{parcaKodu:kod}); modalKapat(); await veriYukle(); bildir('Silindi','basari'); }
+        catch(e){ bildir(e.message,'hata'); } finally { yukle(false); }
+     }}] : []),
+     { metin:'İptal', sinif:'ikincil', tikla: modalKapat },
+     { metin:'Kaydet', sinif:'', tikla: async () => {
+        const yeni = {
+          'Parça Kodu':document.getElementById('paKod').value.trim(),
+          'Parça Adı':document.getElementById('paAd').value.trim(),
+          'Tedarikçi':document.getElementById('paTedarikci').value,
+          'Makine Kodu':document.getElementById('paMakine').value,
+          'Makinedeki Miktar':document.getElementById('paMakinede').value,
+          'Stok Miktar':document.getElementById('paStok').value,
+          'Min Stok':document.getElementById('paMin').value,
+          'Birim':document.getElementById('paBirim').value,
+          'Notlar':document.getElementById('paNot').value
+        };
+        if (!yeni['Parça Kodu'] || !yeni['Parça Adı'])
+          return bildir('Parça kodu ve adı zorunlu', 'hata');
+        yukle(true); try { await api('parcaKaydet',{parca:yeni}); modalKapat(); await veriYukle(); bildir('Kaydedildi','basari'); }
+        catch(e){ bildir(e.message,'hata'); } finally { yukle(false); }
+     }}], true);
+}
+
+/* =================================================================
+   RAPORLAR
+   ================================================================= */
+function raporCiz(){
+  const yil = document.getElementById('fRaporYil').value;
+  const ie = D.isEmirleri.filter(i => String(i['Kayıt Tarihi']).substring(0,4) === String(yil));
+  const planli = ie.filter(i => i['İşin Türü'] === 'Planlı');
+  const arizi  = ie.filter(i => i['İşin Türü'] === 'Arızi');
+  const kapali = ie.filter(i => i['Durum'] === 'Kapalı');
+
+  const planSatir = D.plan.filter(p => String(p['Yıl']) === String(yil));
+  const yapilan = planSatir.filter(p => p['Durum'] === 'Y').length;
+  const uyum = planSatir.length ? Math.round(yapilan / planSatir.length * 100) : 0;
+  const planliOran = ie.length ? Math.round(planli.length / ie.length * 100) : 0;
+
+  const ariziSureler = arizi.filter(i => parseFloat(i['Süre (dk)']) > 0)
+    .map(i => parseFloat(i['Süre (dk)']));
+  const mttr = ariziSureler.length
+    ? Math.round(ariziSureler.reduce((a,b) => a+b, 0) / ariziSureler.length) : 0;
+
+  const toplamDurus = ie.reduce((t,i) => t + (parseFloat(i['Duruş (dk)'])||0), 0);
+
+  const noSet = new Set(ie.map(i => i['İş Emri No']));
+  const detaylar = D.detaylar.filter(d => noSet.has(d['İş Emri No']));
+  const uygunsuzlar = detaylar.filter(d => d['Sonuç'] === 'Uygun Değil');
+  const uygunsuzOran = detaylar.filter(d => d['Sonuç']).length
+    ? Math.round(uygunsuzlar.length / detaylar.filter(d => d['Sonuç']).length * 100) : 0;
+
+  document.getElementById('raporKutular').innerHTML = `
+    <div class="kutu ${uyum>=80?'iyi':uyum>=50?'uyari':'kritik'}">
+      <div class="etiket">Plan Uyum Oranı</div><div class="deger">%${uyum}</div>
+      <div class="alt">${yapilan} / ${planSatir.length} planlı bakım</div></div>
+    <div class="kutu ${planliOran>=70?'iyi':'uyari'}">
+      <div class="etiket">Planlı Bakım Oranı</div><div class="deger">%${planliOran}</div>
+      <div class="alt">${planli.length} planlı / ${arizi.length} arızi</div></div>
+    <div class="kutu">
+      <div class="etiket">Toplam İş Emri</div><div class="deger">${ie.length}</div>
+      <div class="alt">${kapali.length} kapalı, ${ie.length-kapali.length} açık</div></div>
+    <div class="kutu ${mttr>240?'uyari':''}">
+      <div class="etiket">MTTR (Ort. Onarım)</div><div class="deger">${mttr?sureMetin(mttr):'—'}</div>
+      <div class="alt">Arızi onarım ortalaması</div></div>
+    <div class="kutu ${toplamDurus>0?'uyari':'iyi'}">
+      <div class="etiket">Toplam Üretim Duruşu</div><div class="deger">${toplamDurus?sureMetin(toplamDurus):'0'}</div>
+      <div class="alt">Bakım ve arıza kaynaklı</div></div>
+    <div class="kutu ${uygunsuzOran>20?'kritik':uygunsuzOran>0?'uyari':'iyi'}">
+      <div class="etiket">Uygunsuzluk Oranı</div><div class="deger">%${uygunsuzOran}</div>
+      <div class="alt">${uygunsuzlar.length} madde uygunsuz</div></div>`;
+
+  // Makine bazında
+  document.getElementById('raporMakine').innerHTML = D.makineler.map(m => {
+    const kod = m['Makine Kodu'];
+    const mie = ie.filter(i => i['Makine Kodu'] === kod);
+    const mp = mie.filter(i => i['İşin Türü'] === 'Planlı').length;
+    const ma = mie.filter(i => i['İşin Türü'] === 'Arızi');
+    const sure = mie.reduce((t,i) => t + (parseFloat(i['Süre (dk)'])||0), 0);
+    const aSure = ma.filter(i => parseFloat(i['Süre (dk)'])>0).map(i => parseFloat(i['Süre (dk)']));
+    const mMttr = aSure.length ? Math.round(aSure.reduce((a,b)=>a+b,0)/aSure.length) : 0;
+    const mNo = new Set(mie.map(i => i['İş Emri No']));
+    const mu = D.detaylar.filter(d => mNo.has(d['İş Emri No']) && d['Sonuç']==='Uygun Değil').length;
+    return `<tr>
+      <td><strong>${kacis(kod)}</strong><br><span style="color:var(--metin-2);font-size:12px">${kacis(m['Makine Adı'])}</span></td>
+      <td>${mp}</td>
+      <td>${ma.length ? `<span class="rozet ${ma.length>2?'kirmizi':'amber'}">${ma.length}</span>` : '0'}</td>
+      <td>${sureMetin(sure)}</td>
+      <td>${mMttr ? sureMetin(mMttr) : '—'}</td>
+      <td>${mu ? `<span class="rozet kirmizi">${mu}</span>` : '0'}</td>
+    </tr>`;
+  }).join('');
+
+  // Uygunsuzluk listesi
+  document.getElementById('raporUygunsuz').innerHTML = uygunsuzlar.length
+    ? uygunsuzlar.map(d => {
+        const i = D.isEmirleri.find(x => x['İş Emri No'] === d['İş Emri No']) || {};
+        return `<tr class="tiklanir" onclick="isEmriAc('${kacis(d['İş Emri No'])}')">
+          <td>${kacis(d['İş Emri No'])}</td>
+          <td>${kacis(i['Makine Kodu'])}</td>
+          <td>${kacis(d['Faaliyet'])}</td>
+          <td>${kacis(d['Not'] || '—')}</td></tr>`;
+      }).join('')
+    : '<tr><td colspan="4" class="bos">Uygunsuzluk kaydı yok.</td></tr>';
+}
+
+/* =================================================================
+   MODAL ALTYAPISI
+   ================================================================= */
+function modalAc(baslik, govde, butonlar = [], dar = false){
+  document.getElementById('modalBaslik').textContent = baslik;
+  document.getElementById('modalGovde').innerHTML = govde;
+  document.getElementById('modal').classList.toggle('dar', dar);
+  const alt = document.getElementById('modalAlt');
+  alt.innerHTML = '';
+  butonlar.forEach(b => {
+    const btn = document.createElement('button');
+    btn.className = 'btn ' + (b.sinif || '');
+    btn.textContent = b.metin;
+    btn.onclick = b.tikla;
+    alt.appendChild(btn);
+  });
+  document.getElementById('ortu').classList.add('acik');
+  document.body.style.overflow = 'hidden';
+}
+
+function modalKapat(){
+  document.getElementById('ortu').classList.remove('acik');
+  document.body.style.overflow = '';
+  aktifIsEmri = null;
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') modalKapat();
+});
+
+/* =================================================================
+   NAVİGASYON
+   ================================================================= */
+document.querySelectorAll('nav button').forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll('nav button').forEach(x => x.classList.remove('aktif'));
+    document.querySelectorAll('.sayfa').forEach(x => x.classList.remove('aktif'));
+    b.classList.add('aktif');
+    document.getElementById('s-' + b.dataset.sayfa).classList.add('aktif');
+    window.scrollTo(0,0);
+  };
+});
+
+/* =================================================================
+   BAŞLAT
+   ================================================================= */
+veriYukle();
+</script>
+</body>
+</html>
