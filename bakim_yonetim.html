@@ -285,6 +285,7 @@
   <div class="bosluk"></div>
   <select id="personelSec" title="İşlemi yapan kişi"></select>
   <button onclick="veriYukle(true)" title="Yenile">&#8635;</button>
+  <button onclick="baglantiAyari(false)" title="Bağlantı ayarı">&#9881;</button>
 </header>
 
 <nav>
@@ -542,9 +543,14 @@
 
 <script>
 /* =================================================================
-   AYAR — Apps Script dağıtım URL'sini buraya yapıştır
+   BAĞLANTI AYARI
+   Apps Script dağıtım adresini buraya yapıştırabilirsiniz; boş
+   bırakırsanız uygulama ilk açılışta ekrandan sorar ve tarayıcıda
+   saklar. Böylece dosya güncellendiğinde adres kaybolmaz.
    ================================================================= */
-const API_URL = 'BURAYA_APPS_SCRIPT_URL_YAPISTIR';
+const GOMULU_API = '';   // isteğe bağlı: '...exec' adresi
+
+let API_URL = (localStorage.getItem('bym_api') || GOMULU_API || '').trim();
 
 /* =================================================================
    DURUM
@@ -560,9 +566,7 @@ const AYLAR = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran',
    API
    ================================================================= */
 async function api(action, payload = {}) {
-  if (API_URL.indexOf('BURAYA') === 0) {
-    throw new Error('API_URL ayarlanmamış. HTML dosyasındaki API_URL satırını düzenleyin.');
-  }
+  if (!API_URL) throw new Error('Bağlantı adresi ayarlanmamış.');
   const govde = Object.assign({ action }, payload);
   const yanit = await fetch(API_URL, {
     method: 'POST',
@@ -638,9 +642,59 @@ function ilerleme(no){
 }
 
 /* =================================================================
+   BAĞLANTI AYARI EKRANI
+   ================================================================= */
+function baglantiAyari(ilkKurulum){
+  const mevcut = API_URL || '';
+  modalAc(ilkKurulum ? 'Bağlantı Ayarı' : 'Bağlantı Adresini Değiştir', `
+    ${ilkKurulum ? `<p style="margin-bottom:15px;font-size:13.5px;line-height:1.6">
+      Uygulamanın verilere ulaşabilmesi için Google Apps Script bağlantı adresi gerekiyor.
+      Adresi bir kez girdiğinizde bu tarayıcıda saklanır; uygulama güncellense de tekrar sorulmaz.</p>` : ''}
+    <div class="alan genis">
+      <label>Apps Script Web Uygulaması Adresi</label>
+      <input id="apiGiris" value="${kacis(mevcut)}"
+             placeholder="https://script.google.com/macros/s/.../exec"
+             style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px">
+    </div>
+    <details style="margin-top:14px;font-size:13px;color:var(--metin-2)">
+      <summary style="cursor:pointer;font-weight:600;color:var(--lacivert)">Adresi nereden bulurum?</summary>
+      <ol style="margin:10px 0 0 18px;line-height:1.8">
+        <li>Google Sheets dosyanızı açın</li>
+        <li>Uzantılar &rarr; Apps Script</li>
+        <li>Sağ üstten <strong>Dağıt &rarr; Dağıtımları yönet</strong></li>
+        <li>Web uygulaması adresini kopyalayın (sonu <code>/exec</code> ile biter)</li>
+      </ol>
+    </details>`,
+    [...(ilkKurulum ? [] : [{ metin:'İptal', sinif:'ikincil', tikla: modalKapat }]),
+     { metin:'Kaydet ve Bağlan', sinif:'', tikla: async () => {
+        const v = document.getElementById('apiGiris').value.trim();
+        if (!v) return bildir('Adres boş olamaz', 'hata');
+        if (!/^https:\/\/script\.google\.com\/.*\/exec$/.test(v))
+          return bildir('Adres https://script.google.com/... ile başlayıp /exec ile bitmeli', 'hata');
+
+        const eski = API_URL;
+        API_URL = v;
+        yukle(true, 'Bağlantı deneniyor...');
+        try {
+          await api('ping');
+          localStorage.setItem('bym_api', v);
+          modalKapat();
+          yukle(false);
+          await veriYukle();
+          bildir('Bağlantı kuruldu', 'basari');
+        } catch(e){
+          API_URL = eski;
+          yukle(false);
+          bildir('Bağlanılamadı: ' + e.message, 'hata');
+        }
+     }}], true);
+}
+
+/* =================================================================
    VERİ YÜKLEME
    ================================================================= */
 async function veriYukle(bildirGoster = false){
+  if (!API_URL) { baglantiAyari(true); return; }
   yukle(true, 'Veriler yükleniyor...');
   try {
     D = await api('getAll');
