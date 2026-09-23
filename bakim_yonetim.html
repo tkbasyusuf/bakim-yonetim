@@ -165,6 +165,44 @@
   .hucre.e{background:var(--amber-bg); color:var(--amber); border:1px solid #F3DCB0}
   .hucre.g{background:var(--kirmizi-bg); color:var(--kirmizi); border:1px solid #F7CFC9}
 
+  /* ---------- OPERATÖR KONTROL ---------- */
+  .hafta-gez{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+  .hafta-gez .etiket{font-weight:700; color:var(--lacivert); font-size:14px; min-width:190px; text-align:center}
+  .hafta-gez .etiket small{display:block; font-weight:400; font-size:12px; color:var(--metin-2)}
+
+  .op-madde{border:1px solid var(--gri-2); border-radius:9px; padding:12px 14px; margin-bottom:9px; background:#fff}
+  .op-madde.haftalik{border-left:3px solid var(--amber); background:#FFFDF9}
+  .op-madde.gunluk{border-left:3px solid var(--mavi)}
+  .op-ust{display:flex; gap:9px; align-items:flex-start; margin-bottom:10px}
+  .op-no{background:var(--lacivert); color:#fff; width:22px; height:22px; border-radius:50%;
+         display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex-shrink:0}
+  .op-madde.haftalik .op-no{background:var(--amber)}
+  .op-metin{flex:1; font-size:13.5px; line-height:1.5}
+  .op-etiket{font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.4px;
+             padding:2px 7px; border-radius:4px; flex-shrink:0}
+  .op-etiket.g{background:#E8F0FD; color:var(--mavi)}
+  .op-etiket.h{background:var(--amber-bg); color:var(--amber)}
+
+  .op-gunler{display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin-bottom:8px}
+  .op-gun{border:1px solid var(--gri-3); border-radius:7px; padding:7px 4px; text-align:center;
+          cursor:pointer; background:#fff; user-select:none; font-family:inherit}
+  .op-gun .ad{font-size:10.5px; color:var(--metin-2); font-weight:600; display:block}
+  .op-gun .tar{font-size:9.5px; color:var(--gri-3); display:block; margin-top:1px}
+  .op-gun .im{font-size:17px; line-height:1.15; display:block; min-height:22px; color:var(--gri-3)}
+  .op-gun.var{background:var(--yesil-bg); border-color:var(--yesil)}
+  .op-gun.var .im{color:var(--yesil)}
+  .op-gun.yok{background:var(--kirmizi-bg); border-color:var(--kirmizi)}
+  .op-gun.yok .im{color:var(--kirmizi)}
+  .op-gun.pasif{background:var(--gri-1); border-style:dashed; cursor:not-allowed; opacity:.5}
+  .op-gun.bugun{box-shadow:0 0 0 2px var(--lacivert)}
+  .op-not{width:100%; border:1px solid var(--gri-3); border-radius:6px; padding:6px 10px;
+          font-size:12.5px; font-family:inherit}
+
+  .op-onay{background:#FBFCFE; border:1px solid var(--gri-2); border-radius:9px; padding:15px; margin-top:16px}
+  .op-onay.onayli{background:var(--yesil-bg); border-color:var(--yesil)}
+  .op-kilit{background:var(--yesil-bg); border-left:3px solid var(--yesil); padding:11px 14px;
+            border-radius:7px; margin-bottom:14px; font-size:13px}
+
   /* ---------- MODAL ---------- */
   .ortu{
     position:fixed; inset:0; background:rgba(20,28,45,.55); z-index:100;
@@ -251,6 +289,7 @@
 
 <nav>
   <button class="aktif" data-sayfa="panel">Panel</button>
+  <button data-sayfa="operator">Operatör Kontrol</button>
   <button data-sayfa="isemri">İş Emirleri</button>
   <button data-sayfa="plan">Bakım Planı</button>
   <button data-sayfa="makine">Makineler</button>
@@ -301,6 +340,34 @@
           <thead><tr><th>Parça Kodu</th><th>Parça Adı</th><th>Makine</th><th>Stok</th><th>Min</th></tr></thead>
           <tbody id="panelStok"></tbody>
         </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ OPERATÖR KONTROL ============ -->
+  <section class="sayfa" id="s-operator">
+    <div class="filtre">
+      <select id="opMakine" onchange="opYukle()"></select>
+      <div class="hafta-gez">
+        <button class="btn ikincil kucuk" onclick="opHaftaKaydir(-1)">&#8249; Önceki</button>
+        <div class="etiket" id="opHaftaEtiket">—</div>
+        <button class="btn ikincil kucuk" onclick="opHaftaKaydir(1)">Sonraki &#8250;</button>
+        <button class="btn ikincil kucuk" onclick="opBuHafta()">Bu Hafta</button>
+      </div>
+      <div style="flex:1"></div>
+      <button class="btn ikincil kucuk" onclick="opYazdir()">Yazdır</button>
+    </div>
+
+    <div class="kart">
+      <div class="kart-bas">
+        <h2 id="opBaslik">Operatör Periyodik Bakım Kontrol Listesi</h2>
+        <div class="bosluk"></div>
+        <span id="opOzet" style="font-size:12.5px;color:var(--metin-2)"></span>
+      </div>
+      <div class="kart-govde">
+        <div id="opKilitUyari"></div>
+        <div id="opMaddeler"></div>
+        <div id="opOnayBolum"></div>
       </div>
     </div>
   </section>
@@ -477,7 +544,7 @@
 /* =================================================================
    AYAR — Apps Script dağıtım URL'sini buraya yapıştır
    ================================================================= */
-const API_URL = 'https://script.google.com/macros/s/AKfycbz430MT1AXASSaVQSuqo-Vzf8cr1hK60ab5MiIPvx2Joda-5J0RvxpASn1kBhl_qMew/exec';
+const API_URL = 'BURAYA_APPS_SCRIPT_URL_YAPISTIR';
 
 /* =================================================================
    DURUM
@@ -584,6 +651,15 @@ async function veriYukle(bildirGoster = false){
         D.makineler.map(m => `<option value="${kacis(m['Makine Kodu'])}">${kacis(m['Makine Kodu'])} — ${kacis(m['Makine Adı'])}</option>`).join('');
       s.value = eski;
     });
+
+    // Operatör kontrol makine seçici (tümü seçeneği yok, tek makine gösterilir)
+    const om = document.getElementById('opMakine');
+    const omEski = om.value;
+    om.innerHTML = D.makineler
+      .filter(m => (D.opGorevler || []).some(g => g['Makine Kodu'] === m['Makine Kodu']))
+      .map(m => `<option value="${kacis(m['Makine Kodu'])}">${kacis(m['Makine Kodu'])} — ${kacis(m['Makine Adı'])}</option>`)
+      .join('');
+    if (omEski) om.value = omEski;
 
     const ps = document.getElementById('personelSec');
     if (!ps.options.length) {
@@ -929,7 +1005,8 @@ function isEmriAc(no){
   }
 
   const butonlar = kapali
-    ? [{ metin:'Yazdır', sinif:'ikincil', tikla:() => isEmriYazdir(no) },
+    ? [{ metin:'Sil', sinif:'tehlike', tikla:() => isEmriSil(no, true) },
+       { metin:'Yazdır', sinif:'ikincil', tikla:() => isEmriYazdir(no) },
        { metin:'Kapat', sinif:'ikincil', tikla: modalKapat }]
     : [{ metin:'Sil', sinif:'tehlike', tikla:() => isEmriSil(no) },
        { metin:'Yazdır', sinif:'ikincil', tikla:() => isEmriYazdir(no) },
@@ -1020,8 +1097,14 @@ function isEmriKapatModal(no){
      }}], true);
 }
 
-async function isEmriSil(no){
-  if (!confirm(`${no} numaralı iş emri ve tüm checklist kayıtları silinecek. Emin misiniz?`)) return;
+async function isEmriSil(no, kapali){
+  const uyari = kapali
+    ? `DİKKAT — ${no} KAPANMIŞ bir iş emri.\n\n` +
+      `Silinirse makinenin bakım geçmişinden de kalkar ve bağlı plan satırı ` +
+      `"Planlandı" durumuna geri döner. Kullanılan parçalar stoğa iade edilir.\n\n` +
+      `Bu işlem geri alınamaz. Devam edilsin mi?`
+    : `${no} numaralı iş emri, checklist kayıtları ve parça kullanımları silinecek. Emin misiniz?`;
+  if (!confirm(uyari)) return;
   yukle(true, 'Siliniyor...');
   try {
     await api('isEmriSil', { isEmriNo: no });
@@ -1613,6 +1696,317 @@ function raporCiz(){
 }
 
 /* =================================================================
+   OPERATÖR GÜNLÜK / HAFTALIK KONTROL
+   ================================================================= */
+const GUN_KISA = ['Pzt','Sal','Çar','Per','Cum'];
+const GUN_ALAN = ['Pzt','Sal','Çar','Per','Cum'];
+let opDurum = { yil:null, hafta:null, satirlar:[], onay:null };
+
+/** Bir tarihin ISO yıl/hafta numarası */
+function isoHafta(t){
+  const d = new Date(Date.UTC(t.getFullYear(), t.getMonth(), t.getDate()));
+  const gun = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - gun);
+  const yilBas = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const hafta = Math.ceil((((d - yilBas) / 86400000) + 1) / 7);
+  return { yil: d.getUTCFullYear(), hafta };
+}
+
+/** ISO yıl/hafta → o haftanın pazartesi tarihi */
+function haftaPazartesi(yil, hafta){
+  const ocak4 = new Date(Date.UTC(yil, 0, 4));
+  const gun = ocak4.getUTCDay() || 7;
+  const hafta1Pzt = new Date(ocak4);
+  hafta1Pzt.setUTCDate(ocak4.getUTCDate() - gun + 1);
+  const pzt = new Date(hafta1Pzt);
+  pzt.setUTCDate(hafta1Pzt.getUTCDate() + (hafta - 1) * 7);
+  return pzt;
+}
+
+/** Haftanın Pzt–Cum tarihleri (ISO yyyy-mm-dd) */
+function haftaGunleri(yil, hafta){
+  const pzt = haftaPazartesi(yil, hafta);
+  const out = [];
+  for (let i = 0; i < 5; i++){
+    const d = new Date(pzt);
+    d.setUTCDate(pzt.getUTCDate() + i);
+    out.push(d.toISOString().substring(0,10));
+  }
+  return out;
+}
+
+function opBuHafta(){
+  const h = isoHafta(new Date(D.bugun + 'T12:00:00'));
+  opDurum.yil = h.yil; opDurum.hafta = h.hafta;
+  opYukle();
+}
+
+function opHaftaKaydir(yon){
+  const pzt = haftaPazartesi(opDurum.yil, opDurum.hafta);
+  pzt.setUTCDate(pzt.getUTCDate() + yon * 7);
+  const h = isoHafta(new Date(pzt.getUTCFullYear(), pzt.getUTCMonth(), pzt.getUTCDate()));
+  opDurum.yil = h.yil; opDurum.hafta = h.hafta;
+  opYukle();
+}
+
+async function opYukle(){
+  const kod = document.getElementById('opMakine').value;
+  if (!kod) return;
+  if (opDurum.yil === null){
+    const h = isoHafta(new Date(D.bugun + 'T12:00:00'));
+    opDurum.yil = h.yil; opDurum.hafta = h.hafta;
+  }
+  yukle(true, 'Çizelge yükleniyor...');
+  try {
+    const s = await api('opHaftaGetir', { makineKodu:kod, yil:opDurum.yil, hafta:opDurum.hafta });
+    opDurum.satirlar = s.satirlar || [];
+    opDurum.onay = s.onay || null;
+    opCiz();
+  } catch(e){ bildir(e.message, 'hata'); }
+  finally { yukle(false); }
+}
+
+function opCiz(){
+  const kod = document.getElementById('opMakine').value;
+  const gunler = haftaGunleri(opDurum.yil, opDurum.hafta);
+  const kilitli = !!opDurum.onay;
+
+  document.getElementById('opHaftaEtiket').innerHTML =
+    `${opDurum.yil} — Hafta ${opDurum.hafta}` +
+    `<small>${tarihTR(gunler[0])} – ${tarihTR(gunler[4])}</small>`;
+  document.getElementById('opBaslik').textContent =
+    `${kod} — ${makineAdi(kod)}`;
+
+  // Kilit uyarısı
+  document.getElementById('opKilitUyari').innerHTML = kilitli
+    ? `<div class="op-kilit"><strong>Bu hafta onaylandı.</strong>
+       ${tarihTR(opDurum.onay['Onay Tarihi'])} — ${kacis(opDurum.onay['Onaylayan'] || '')}.
+       Değişiklik için önce onayı kaldırın.</div>`
+    : '';
+
+  if (!opDurum.satirlar.length){
+    document.getElementById('opMaddeler').innerHTML =
+      '<div class="bos">Bu makine için operatör kontrol görevi tanımlı değil.</div>';
+    document.getElementById('opOnayBolum').innerHTML = '';
+    document.getElementById('opOzet').textContent = '';
+    return;
+  }
+
+  let gSira = 0, hSira = 0, dolu = 0, toplam = 0;
+  const html = opDurum.satirlar.map(r => {
+    const haftalik = r['Periyot'] === 'Haftalık';
+    const no = haftalik ? ++hSira : ++gSira;
+
+    const gunHtml = GUN_ALAN.map((alan, i) => {
+      // Haftalık maddeler yalnızca cuma işaretlenir
+      const pasif = haftalik && i < 4;
+      const deger = r[alan] || '';
+      if (!pasif) { toplam++; if (deger) dolu++; }
+      const sinif = deger === '✓' ? 'var' : deger === '✗' ? 'yok' : '';
+      const bugunMu = gunler[i] === D.bugun ? ' bugun' : '';
+      return `<div class="op-gun ${pasif ? 'pasif' : sinif}${bugunMu}"
+        ${pasif || kilitli ? '' : `onclick="opTikla(this,'${kacis(r['Kayıt ID'])}','${alan}')"`}>
+        <span class="ad">${GUN_KISA[i]}</span>
+        <span class="im">${pasif ? '·' : (deger || '')}</span>
+        <span class="tar">${gunler[i].substring(8,10)}.${gunler[i].substring(5,7)}</span>
+      </div>`;
+    }).join('');
+
+    return `<div class="op-madde ${haftalik ? 'haftalik' : 'gunluk'}" data-kayit="${kacis(r['Kayıt ID'])}">
+      <div class="op-ust">
+        <div class="op-no">${no}</div>
+        <div class="op-metin">${kacis(r['Faaliyet'])}</div>
+        <div class="op-etiket ${haftalik ? 'h' : 'g'}">${haftalik ? 'Haftalık' : 'Günlük'}</div>
+      </div>
+      <div class="op-gunler">${gunHtml}</div>
+      <input class="op-not" placeholder="Not (varsa)" value="${kacis(r['Not'])}" ${kilitli ? 'readonly' : ''}>
+    </div>`;
+  }).join('');
+
+  document.getElementById('opMaddeler').innerHTML = html;
+  document.getElementById('opOzet').textContent = `${dolu}/${toplam} kontrol işaretlendi`;
+
+  // Onay bölümü
+  document.getElementById('opOnayBolum').innerHTML = kilitli
+    ? `<div class="op-onay onayli">
+        <div class="bolum" style="margin-top:0">Haftalık Onay</div>
+        <dl class="bilgi">
+          <dt>Onay Tarihi</dt><dd>${tarihTR(opDurum.onay['Onay Tarihi'])}</dd>
+          <dt>Onaylayan</dt><dd>${kacis(opDurum.onay['Onaylayan'] || '—')}</dd>
+          <dt>Açıklama</dt><dd>${kacis(opDurum.onay['Açıklama'] || '—')}</dd>
+        </dl>
+        <button class="btn ikincil kucuk" style="margin-top:12px" onclick="opOnayKaldir()">Onayı Kaldır</button>
+      </div>`
+    : `<div class="op-onay">
+        <div class="bolum" style="margin-top:0">Haftalık Onay</div>
+        <div class="form-izgara">
+          <div class="alan"><label>Onay Tarihi</label>
+            <input type="date" id="opOnayTarih" value="${gunler[4]}"></div>
+          <div class="alan"><label>Onaylayan</label>
+            <input id="opOnaylayan" value="${kacis(aktifPersonel())}" placeholder="Ad Soyad"></div>
+          <div class="alan genis"><label>Açıklama</label>
+            <textarea id="opAciklama" placeholder="Hafta boyunca tespit edilen durumlar, bakıma bildirilenler..."></textarea></div>
+        </div>
+        <div style="display:flex; gap:9px; margin-top:13px; flex-wrap:wrap">
+          <button class="btn" onclick="opKaydet()">Kaydet</button>
+          <button class="btn yesil" onclick="opOnayla()">Kaydet ve Haftayı Onayla</button>
+        </div>
+      </div>`;
+}
+
+/** Hücre tıklaması: boş → ✓ → ✗ → boş */
+function opTikla(el, kayitId, alan){
+  const mevcut = el.querySelector('.im').textContent.trim();
+  const yeni = mevcut === '' ? '✓' : mevcut === '✓' ? '✗' : '';
+  el.querySelector('.im').textContent = yeni;
+  el.classList.remove('var','yok');
+  if (yeni === '✓') el.classList.add('var');
+  if (yeni === '✗') el.classList.add('yok');
+
+  const satir = opDurum.satirlar.find(r => r['Kayıt ID'] === kayitId);
+  if (satir) satir[alan] = yeni;
+
+  // Özet sayacını tazele
+  let dolu = 0, toplam = 0;
+  document.querySelectorAll('#opMaddeler .op-gun').forEach(g => {
+    if (g.classList.contains('pasif')) return;
+    toplam++;
+    if (g.querySelector('.im').textContent.trim()) dolu++;
+  });
+  document.getElementById('opOzet').textContent = `${dolu}/${toplam} kontrol işaretlendi`;
+}
+
+function opSatirlariTopla(){
+  return [...document.querySelectorAll('#opMaddeler .op-madde')].map(m => {
+    const gunler = m.querySelectorAll('.op-gun');
+    const al = i => {
+      const g = gunler[i];
+      if (!g || g.classList.contains('pasif')) return '';
+      const v = g.querySelector('.im').textContent.trim();
+      return v === '·' ? '' : v;
+    };
+    return {
+      kayitId: m.dataset.kayit,
+      pzt: al(0), sal: al(1), car: al(2), per: al(3), cum: al(4),
+      not: m.querySelector('.op-not').value
+    };
+  });
+}
+
+async function opKaydet(sessiz){
+  yukle(true, 'Kaydediliyor...');
+  try {
+    await api('opKaydet', { satirlar: opSatirlariTopla() });
+    if (!sessiz) { bildir('Çizelge kaydedildi', 'basari'); await opYukle(); }
+  } catch(e){ bildir(e.message, 'hata'); }
+  finally { yukle(false); }
+}
+
+async function opOnayla(){
+  const eksik = opSatirlariTopla().reduce((t,r) =>
+    t + ['pzt','sal','car','per','cum'].filter(k => r[k] === '').length, 0);
+  if (eksik && !confirm(`${eksik} kontrol işaretlenmemiş.\n\nHafta yine de onaylansın mı? Onaylandıktan sonra çizelge kilitlenir.`)) return;
+
+  yukle(true, 'Onaylanıyor...');
+  try {
+    await api('opKaydet', { satirlar: opSatirlariTopla() });
+    await api('opOnayla', {
+      makineKodu : document.getElementById('opMakine').value,
+      yil        : opDurum.yil,
+      hafta      : opDurum.hafta,
+      onayTarihi : document.getElementById('opOnayTarih').value,
+      aciklama   : document.getElementById('opAciklama').value,
+      onaylayan  : document.getElementById('opOnaylayan').value
+    });
+    await veriYukle();
+    await opYukle();
+    bildir('Hafta onaylandı', 'basari');
+  } catch(e){ bildir(e.message, 'hata'); }
+  finally { yukle(false); }
+}
+
+async function opOnayKaldir(){
+  if (!confirm('Haftalık onay kaldırılacak ve çizelge tekrar düzenlenebilir olacak. Devam edilsin mi?')) return;
+  yukle(true, 'Onay kaldırılıyor...');
+  try {
+    await api('opOnayKaldir', {
+      makineKodu: document.getElementById('opMakine').value,
+      yil: opDurum.yil, hafta: opDurum.hafta
+    });
+    await veriYukle();
+    await opYukle();
+    bildir('Onay kaldırıldı', 'basari');
+  } catch(e){ bildir(e.message, 'hata'); }
+  finally { yukle(false); }
+}
+
+/** Excel formundaki ızgara düzeninde çıktı */
+function opYazdir(){
+  const kod = document.getElementById('opMakine').value;
+  const gunler = haftaGunleri(opDurum.yil, opDurum.hafta);
+  const firma = (D.ayarlar.find(a => a['Anahtar']==='firma') || {})['Değer'] || '';
+  const guncel = opSatirlariTopla();
+  const deger = (kid, alan) => {
+    const g = guncel.find(x => x.kayitId === kid);
+    return g ? (g[alan] || '') : '';
+  };
+
+  const gunluk = opDurum.satirlar.filter(r => r['Periyot'] === 'Günlük');
+  const haftalik = opDurum.satirlar.filter(r => r['Periyot'] === 'Haftalık');
+
+  const satirYaz = (r, sadeceCuma) => `<tr>
+    <td>${kacis(r['Faaliyet'])}</td>
+    ${['pzt','sal','car','per','cum'].map((a,i) =>
+      `<td class="im">${sadeceCuma && i < 4 ? '—' : kacis(deger(r['Kayıt ID'], a))}</td>`).join('')}
+    <td>${kacis(deger(r['Kayıt ID'], 'not'))}</td></tr>`;
+
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
+  <title>Operatör Kontrol ${kacis(kod)} Hf${opDurum.hafta}</title><style>
+    body{font-family:Arial,sans-serif;font-size:11px;padding:18px;max-width:800px;margin:0 auto;color:#000}
+    h1{font-size:14px;text-align:center;margin-bottom:3px}
+    .firma{text-align:center;font-size:10px;color:#444;margin-bottom:14px}
+    table{width:100%;border-collapse:collapse;margin-bottom:13px}
+    td,th{border:1px solid #666;padding:5px 7px;vertical-align:top}
+    th{background:#E8EAF0;font-weight:bold;text-align:left;font-size:10px}
+    th.g,td.im{text-align:center;width:38px}
+    .bas{background:#1F3864;color:#fff;font-weight:bold;padding:5px 7px;margin:13px 0 7px;font-size:11px}
+    td.im{font-size:14px;font-weight:bold}
+    .imza{margin-top:26px;border-top:1px solid #000;padding-top:5px;width:240px;text-align:center;font-size:10px}
+    @media print{body{padding:0}}
+  </style></head><body>
+  <h1>OPERATÖR PERİYODİK BAKIM KONTROL LİSTESİ</h1>
+  <div class="firma">${kacis(firma)}</div>
+  <table>
+    <tr><th width="26%">Makine Kodu / Adı</th><td>${kacis(kod)} — ${kacis(makineAdi(kod))}</td>
+        <th width="12%">Hafta</th><td width="26%">${opDurum.yil} / ${opDurum.hafta}
+        (${tarihTR(gunler[0])} – ${tarihTR(gunler[4])})</td></tr>
+  </table>
+
+  ${gunluk.length ? `<div class="bas">GÜNLÜK KONTROL EDİLECEK NOKTALAR</div>
+  <table><thead><tr><th>Faaliyet</th>
+    ${GUN_KISA.map((g,i)=>`<th class="g">${g}<br><span style="font-weight:400">${gunler[i].substring(8,10)}.${gunler[i].substring(5,7)}</span></th>`).join('')}
+    <th width="110">Not</th></tr></thead>
+  <tbody>${gunluk.map(r => satirYaz(r, false)).join('')}</tbody></table>` : ''}
+
+  ${haftalik.length ? `<div class="bas">HAFTALIK KONTROL EDİLECEK NOKTALAR</div>
+  <table><thead><tr><th>Faaliyet</th>
+    ${GUN_KISA.map((g,i)=>`<th class="g">${g}<br><span style="font-weight:400">${gunler[i].substring(8,10)}.${gunler[i].substring(5,7)}</span></th>`).join('')}
+    <th width="110">Not</th></tr></thead>
+  <tbody>${haftalik.map(r => satirYaz(r, true)).join('')}</tbody></table>` : ''}
+
+  <div class="bas">HAFTALIK ONAY</div>
+  <table>
+    <tr><th width="26%">Tarih</th><td>${opDurum.onay ? tarihTR(opDurum.onay['Onay Tarihi']) : ''}</td></tr>
+    <tr><th>Açıklama</th><td style="height:48px">${opDurum.onay ? kacis(opDurum.onay['Açıklama']) : ''}</td></tr>
+  </table>
+  <div class="imza">Onay<br><br>${opDurum.onay ? kacis(opDurum.onay['Onaylayan']) : ''}</div>
+  </body></html>`);
+  w.document.close();
+  setTimeout(() => w.print(), 350);
+}
+
+/* =================================================================
    MODAL ALTYAPISI
    ================================================================= */
 function modalAc(baslik, govde, butonlar = [], dar = false){
@@ -1652,6 +2046,8 @@ document.querySelectorAll('nav button').forEach(b => {
     b.classList.add('aktif');
     document.getElementById('s-' + b.dataset.sayfa).classList.add('aktif');
     window.scrollTo(0,0);
+    // Operatör çizelgesi ilk açılışta yüklenir
+    if (b.dataset.sayfa === 'operator' && !opDurum.satirlar.length) opYukle();
   };
 });
 
