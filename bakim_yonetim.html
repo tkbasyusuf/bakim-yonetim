@@ -610,18 +610,49 @@ const AYLAR = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran',
 /* =================================================================
    API
    ================================================================= */
-async function api(action, payload = {}) {
+const bekle = ms => new Promise(r => setTimeout(r, ms));
+
+/**
+ *  Apps Script ara sıra geçici hata döndürür (eşzamanlı istek, ağ kesintisi).
+ *  Bu tür hatalarda sessizce iki kez daha dener; kalıcı hatada hemen vazgeçer.
+ */
+async function api(action, payload = {}, deneme = 0) {
   if (!API_URL) throw new Error('Bağlantı adresi ayarlanmamış.');
   const govde = Object.assign({ action }, payload);
-  const yanit = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(govde)
-  });
-  if (!yanit.ok) throw new Error('Sunucu hatası: ' + yanit.status);
-  const sonuc = await yanit.json();
-  if (!sonuc.ok) throw new Error(sonuc.hata || 'Bilinmeyen hata');
-  return sonuc.data;
+
+  try {
+    const yanit = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(govde)
+    });
+    if (!yanit.ok) throw new Error('GECICI:' + yanit.status);
+
+    const metin = await yanit.text();
+    let sonuc;
+    try { sonuc = JSON.parse(metin); }
+    catch(x) { throw new Error('GECICI:bozuk-yanit'); }
+
+    if (!sonuc.ok) {
+      const h = sonuc.hata || 'Bilinmeyen hata';
+      // Kilit çakışması geçicidir, tekrar denenebilir
+      if (h.indexOf('başka bir kaydı işliyor') >= 0) throw new Error('GECICI:kilit');
+      throw new Error(h);
+    }
+    return sonuc.data;
+
+  } catch(e){
+    const gecici = String(e.message).indexOf('GECICI:') === 0 ||
+                   e.name === 'TypeError';           // ağ kesintisi
+    if (gecici && deneme < 2) {
+      await bekle(700 * (deneme + 1));
+      return api(action, payload, deneme + 1);
+    }
+    if (String(e.message).indexOf('GECICI:') === 0) {
+      throw new Error('Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.');
+    }
+    throw e;
+  }
 }
 
 function yukle(acik, metin='Yükleniyor...'){
@@ -1156,11 +1187,21 @@ function baslikTopla(){
 }
 
 async function isEmriKaydet(no, sessiz){
+  const baslik = baslikTopla(), detaylar = detaylariTopla();
   yukle(true, 'Kaydediliyor...');
   try {
-    await api('isEmriKaydet', { isEmriNo: no, baslik: baslikTopla(), detaylar: detaylariTopla() });
-    await veriYukle();
-    if (!sessiz) { bildir('Kaydedildi', 'basari'); isEmriAc(no); }
+    await api('isEmriKaydet', { isEmriNo: no, baslik, detaylar });
+
+    // Yerel veriyi güncelle — tam yeniden yükleme (8 ek istek) gerekmiyor
+    const ie = D.isEmirleri.find(x => x['İş Emri No'] === no);
+    if (ie) Object.assign(ie, baslik);
+    detaylar.forEach(d => {
+      const k = D.detaylar.find(x => x['İş Emri No'] === no && String(x['Sıra']) === String(d.sira));
+      if (k) { k['Sonuç'] = d.sonuc; k['Not'] = d.not; }
+    });
+    isEmriListele(); panelCiz();
+
+    if (!sessiz) bildir('Kaydedildi', 'basari');
   } catch (e) { bildir(e.message, 'hata'); }
   finally { yukle(false); }
 }
@@ -2176,8 +2217,15 @@ function opSatirlariTopla(){
 async function opKaydet(sessiz){
   yukle(true, 'Kaydediliyor...');
   try {
-    await api('opKaydet', { satirlar: opSatirlariTopla() });
-    if (!sessiz) { bildir('Çizelge kaydedildi', 'basari'); await opYukle(); }
+    const kaydedilen = opSatirlariTopla();
+    await api('opKaydet', { satirlar: kaydedilen });
+    // Yerel durumu güncelle — yeniden çekmeye gerek yok
+    kaydedilen.forEach(x => {
+      const r = opDurum.satirlar.find(s => s['Kayıt ID'] === x.kayitId);
+      if (r) { r['Pzt']=x.pzt; r['Sal']=x.sal; r['Çar']=x.car;
+               r['Per']=x.per; r['Cum']=x.cum; r['Not']=x.not; }
+    });
+    if (!sessiz) bildir('Çizelge kaydedildi', 'basari');
   } catch(e){ bildir(e.message, 'hata'); }
   finally { yukle(false); }
 }
@@ -2198,7 +2246,6 @@ async function opOnayla(){
       aciklama   : document.getElementById('opAciklama').value,
       onaylayan  : document.getElementById('opOnaylayan').value
     });
-    await veriYukle();
     await opYukle();
     bildir('Hafta onaylandı', 'basari');
   } catch(e){ bildir(e.message, 'hata'); }
@@ -2213,7 +2260,6 @@ async function opOnayKaldir(){
       makineKodu: document.getElementById('opMakine').value,
       yil: opDurum.yil, hafta: opDurum.hafta
     });
-    await veriYukle();
     await opYukle();
     bildir('Onay kaldırıldı', 'basari');
   } catch(e){ bildir(e.message, 'hata'); }
