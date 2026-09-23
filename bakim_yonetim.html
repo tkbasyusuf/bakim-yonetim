@@ -334,6 +334,22 @@
       </div>
     </div>
 
+    <div class="kart" id="kartOpHafta" style="display:none">
+      <div class="kart-bas">
+        <h2>Bu Haftanın Operatör Kontrolleri</h2>
+        <div class="bosluk"></div>
+        <span id="opHaftaBilgi" style="font-size:12.5px;color:var(--metin-2)"></span>
+      </div>
+      <div class="kart-govde sifir tablo-sar">
+        <table>
+          <thead><tr>
+            <th>Makine</th><th>Doluluk</th><th>Durum</th><th>Uygunsuzluk</th><th></th>
+          </tr></thead>
+          <tbody id="panelOpHafta"></tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="kart" id="kartKritikStok" style="display:none">
       <div class="kart-bas"><h2>Kritik Stok Uyarıları</h2></div>
       <div class="kart-govde sifir tablo-sar">
@@ -514,11 +530,40 @@
     </div>
 
     <div class="kart">
-      <div class="kart-bas"><h2>Tespit Edilen Uygunsuzluklar</h2></div>
+      <div class="kart-bas"><h2>Planlı Bakımda Tespit Edilen Uygunsuzluklar</h2></div>
       <div class="kart-govde sifir tablo-sar">
         <table>
           <thead><tr><th>İş Emri</th><th>Makine</th><th>Faaliyet</th><th>Not</th></tr></thead>
           <tbody id="raporUygunsuz"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="kart" id="kartOpUygunsuz">
+      <div class="kart-bas">
+        <h2>Operatörün Tespit Ettiği Uygunsuzluklar</h2>
+        <div class="bosluk"></div>
+        <span style="font-size:12px;color:var(--metin-2)">Arızi iş emri açılması gerekebilir</span>
+      </div>
+      <div class="kart-govde sifir tablo-sar">
+        <table>
+          <thead><tr>
+            <th>Hafta</th><th>Makine</th><th>Gün</th><th>Faaliyet</th><th>Not</th><th></th>
+          </tr></thead>
+          <tbody id="raporOpUygunsuz"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="kart" id="kartOpHaftalar">
+      <div class="kart-bas"><h2>Operatör Kontrol — Haftalık Doluluk</h2></div>
+      <div class="kart-govde sifir tablo-sar">
+        <table>
+          <thead><tr>
+            <th>Hafta</th><th>Tarih Aralığı</th><th>Makine</th>
+            <th>Doluluk</th><th>Uygunsuzluk</th><th>Onay</th>
+          </tr></thead>
+          <tbody id="raporOpHaftalar"></tbody>
         </table>
       </div>
     </div>
@@ -837,6 +882,9 @@ function panelCiz(){
       <td style="text-align:right"><button class="btn kucuk ikincil">Aç</button></td>
     </tr>`;
   }).join('') : '<tr><td colspan="6" class="bos">Açık iş emri yok.</td></tr>';
+
+  // Operatör kontrol kartı (kendi API çağrısını yapar)
+  panelOpCiz();
 
   // Kritik stok
   document.getElementById('kartKritikStok').style.display = kritikStok.length ? '' : 'none';
@@ -1670,7 +1718,7 @@ function parcaDuzenle(kod = ''){
 /* =================================================================
    RAPORLAR
    ================================================================= */
-function raporCiz(){
+async function raporCiz(){
   const yil = document.getElementById('fRaporYil').value;
   const ie = D.isEmirleri.filter(i => String(i['Kayıt Tarihi']).substring(0,4) === String(yil));
   const planli = ie.filter(i => i['İşin Türü'] === 'Planlı');
@@ -1713,7 +1761,9 @@ function raporCiz(){
       <div class="alt">Bakım ve arıza kaynaklı</div></div>
     <div class="kutu ${uygunsuzOran>20?'kritik':uygunsuzOran>0?'uyari':'iyi'}">
       <div class="etiket">Uygunsuzluk Oranı</div><div class="deger">%${uygunsuzOran}</div>
-      <div class="alt">${uygunsuzlar.length} madde uygunsuz</div></div>`;
+      <div class="alt">${uygunsuzlar.length} madde uygunsuz</div></div>
+    <div class="kutu" id="kutuOpDoluluk" style="display:none"></div>
+    <div class="kutu" id="kutuOpTespit" style="display:none"></div>`;
 
   // Makine bazında
   document.getElementById('raporMakine').innerHTML = D.makineler.map(m => {
@@ -1736,6 +1786,25 @@ function raporCiz(){
     </tr>`;
   }).join('');
 
+  // Operatör kontrol bölümleri ve özet kutuları
+  raporOpCiz().then(s => {
+    if (!s || s.yok) return;
+    const oran = s.toplam ? Math.round(s.dolu / s.toplam * 100) : 0;
+    const kd = document.getElementById('kutuOpDoluluk');
+    const kt = document.getElementById('kutuOpTespit');
+    if (!kd || !kt) return;
+    kd.style.display = '';
+    kd.className = 'kutu ' + (oran >= 90 ? 'iyi' : oran >= 50 ? 'uyari' : 'kritik');
+    kd.innerHTML = `<div class="etiket">Operatör Kontrol Doluluğu</div>
+      <div class="deger">%${oran}</div>
+      <div class="alt">${s.haftalar.length} hafta, ${s.onaySayisi} onay</div>`;
+    kt.style.display = '';
+    kt.className = 'kutu ' + (s.uygunsuzluklar.length ? 'kritik' : 'iyi');
+    kt.innerHTML = `<div class="etiket">Operatör Tespiti</div>
+      <div class="deger">${s.uygunsuzluklar.length}</div>
+      <div class="alt">Uygunsuz işaretlenen kontrol</div>`;
+  });
+
   // Uygunsuzluk listesi
   document.getElementById('raporUygunsuz').innerHTML = uygunsuzlar.length
     ? uygunsuzlar.map(d => {
@@ -1747,6 +1816,134 @@ function raporCiz(){
           <td>${kacis(d['Not'] || '—')}</td></tr>`;
       }).join('')
     : '<tr><td colspan="4" class="bos">Uygunsuzluk kaydı yok.</td></tr>';
+}
+
+/* =================================================================
+   OPERATÖR KONTROL — PANEL VE RAPOR ÖZETLERİ
+   ================================================================= */
+
+/** Doluluk yüzdesi için renkli çubuk */
+function dolulukCubuk(dolu, toplam){
+  const y = toplam ? Math.round(dolu / toplam * 100) : 0;
+  const renk = y >= 90 ? 'var(--yesil)' : y >= 50 ? 'var(--amber)' : 'var(--kirmizi)';
+  return `<div style="display:flex;align-items:center;gap:9px">
+    <div style="flex:1;min-width:70px;max-width:130px;height:7px;background:var(--gri-2);border-radius:4px;overflow:hidden">
+      <div style="width:${y}%;height:100%;background:${renk}"></div>
+    </div>
+    <span style="font-size:12.5px;color:var(--metin-2);white-space:nowrap">${dolu}/${toplam} (%${y})</span>
+  </div>`;
+}
+
+async function panelOpCiz(){
+  if (!D.opGorevler || !D.opGorevler.length){
+    document.getElementById('kartOpHafta').style.display = 'none';
+    return;
+  }
+  const h = isoHafta(new Date(D.bugun + 'T12:00:00'));
+  let s;
+  try { s = await api('opOzet', { yil:h.yil, hafta:h.hafta }); }
+  catch(e){ document.getElementById('kartOpHafta').style.display = 'none'; return; }
+
+  if (!s.makineler || !s.makineler.length){
+    document.getElementById('kartOpHafta').style.display = 'none';
+    return;
+  }
+  document.getElementById('kartOpHafta').style.display = '';
+  const g = haftaGunleri(h.yil, h.hafta);
+  document.getElementById('opHaftaBilgi').textContent =
+    `${h.yil} — Hafta ${h.hafta} (${tarihTR(g[0])} – ${tarihTR(g[4])})`;
+
+  document.getElementById('panelOpHafta').innerHTML = s.makineler.map(m => {
+    let durum;
+    if (m.onayli)        durum = '<span class="rozet yesil">Onaylandı</span>';
+    else if (!m.acildi)  durum = '<span class="rozet gri">Başlanmadı</span>';
+    else if (m.dolu >= m.toplam) durum = '<span class="rozet mavi">Tamam, onay bekliyor</span>';
+    else                 durum = '<span class="rozet amber">Devam ediyor</span>';
+
+    return `<tr>
+      <td><strong>${kacis(m.kod)}</strong><br>
+          <span style="color:var(--metin-2);font-size:12px">${kacis(makineAdi(m.kod))}</span></td>
+      <td>${dolulukCubuk(m.dolu, m.toplam)}</td>
+      <td>${durum}</td>
+      <td>${m.uygunsuz ? `<span class="rozet kirmizi">${m.uygunsuz}</span>` : '0'}</td>
+      <td style="text-align:right">
+        <button class="btn kucuk ikincil" onclick="opAc('${kacis(m.kod)}',${h.yil},${h.hafta})">Aç</button>
+      </td></tr>`;
+  }).join('');
+}
+
+/** Panelden veya rapordan operatör çizelgesine atla */
+function opAc(kod, yil, hafta){
+  document.querySelectorAll('nav button').forEach(x => x.classList.remove('aktif'));
+  document.querySelectorAll('.sayfa').forEach(x => x.classList.remove('aktif'));
+  document.querySelector('nav button[data-sayfa="operator"]').classList.add('aktif');
+  document.getElementById('s-operator').classList.add('aktif');
+  window.scrollTo(0,0);
+  document.getElementById('opMakine').value = kod;
+  opDurum.yil = yil; opDurum.hafta = hafta;
+  opYukle();
+}
+
+async function raporOpCiz(){
+  const yil = document.getElementById('fRaporYil').value;
+  const kartU = document.getElementById('kartOpUygunsuz');
+  const kartH = document.getElementById('kartOpHaftalar');
+
+  if (!D.opGorevler || !D.opGorevler.length){
+    kartU.style.display = 'none'; kartH.style.display = 'none';
+    return { yok:true };
+  }
+  let s;
+  try { s = await api('opRapor', { yil }); }
+  catch(e){ kartU.style.display='none'; kartH.style.display='none'; return { yok:true }; }
+
+  kartU.style.display = ''; kartH.style.display = '';
+
+  document.getElementById('raporOpUygunsuz').innerHTML = s.uygunsuzluklar.length
+    ? s.uygunsuzluklar.map(u => {
+        const g = haftaGunleri(parseInt(s.yil,10), parseInt(u.hafta,10));
+        const i = ['Pzt','Sal','Çar','Per','Cum'].indexOf(u.gun);
+        return `<tr>
+          <td>Hf ${kacis(u.hafta)}</td>
+          <td><strong>${kacis(u.makine)}</strong></td>
+          <td>${kacis(u.gun)}<br><span style="color:var(--metin-2);font-size:12px">${tarihTR(g[i])}</span></td>
+          <td>${kacis(u.faaliyet)}</td>
+          <td>${kacis(u.not || '—')}</td>
+          <td style="text-align:right;white-space:nowrap">
+            <button class="btn kucuk ikincil" onclick="opAc('${kacis(u.makine)}',${s.yil},${u.hafta})">Çizelge</button>
+            <button class="btn kucuk" style="margin-left:5px"
+              onclick="ariziAc('${kacis(u.makine)}',${JSON.stringify(u.faaliyet).replace(/"/g,'&quot;')})">İş Emri</button>
+          </td></tr>`;
+      }).join('')
+    : '<tr><td colspan="6" class="bos">Operatör kontrollerinde uygunsuzluk kaydı yok.</td></tr>';
+
+  document.getElementById('raporOpHaftalar').innerHTML = s.haftalar.length
+    ? s.haftalar.map(h => {
+        const g = haftaGunleri(parseInt(s.yil,10), parseInt(h.hafta,10));
+        return `<tr>
+          <td><strong>Hf ${kacis(h.hafta)}</strong></td>
+          <td>${tarihTR(g[0])} – ${tarihTR(g[4])}</td>
+          <td>${h.makineSayisi}</td>
+          <td>${dolulukCubuk(h.dolu, h.toplam)}</td>
+          <td>${h.uygunsuz ? `<span class="rozet kirmizi">${h.uygunsuz}</span>` : '0'}</td>
+          <td>${h.onayli ? '<span class="rozet yesil">Onaylı</span>' : '<span class="rozet gri">—</span>'}</td>
+        </tr>`;
+      }).join('')
+    : '<tr><td colspan="6" class="bos">Bu yıl için operatör kontrol kaydı yok.</td></tr>';
+
+  return s;
+}
+
+/** Uygunsuzluktan doğrudan arızi iş emri aç */
+function ariziAc(kod, faaliyet){
+  isEmriAcModal();
+  setTimeout(() => {
+    document.getElementById('yTur').value = 'Arızi';
+    document.getElementById('yMakine').value = kod;
+    yeniTurDegisti();
+    document.getElementById('yAriza').value =
+      'Operatör kontrolünde uygunsuz işaretlendi: ' + faaliyet;
+  }, 60);
 }
 
 /* =================================================================
@@ -1805,7 +2002,36 @@ function opHaftaKaydir(yon){
 
 async function opYukle(){
   const kod = document.getElementById('opMakine').value;
-  if (!kod) return;
+
+  // Modül henüz kurulmamışsa yol göster
+  if (!kod) {
+    const kurulu = D.opGorevler && D.opGorevler.length;
+    document.getElementById('opHaftaEtiket').textContent = '—';
+    document.getElementById('opBaslik').textContent = 'Operatör Periyodik Bakım Kontrol Listesi';
+    document.getElementById('opOzet').textContent = '';
+    document.getElementById('opOnayBolum').innerHTML = '';
+    document.getElementById('opKilitUyari').innerHTML = '';
+    document.getElementById('opMaddeler').innerHTML = kurulu
+      ? '<div class="bos">Hiçbir makinede operatör kontrol görevi tanımlı değil.<br>' +
+        'Google Sheets &rarr; <strong>OperatorGorevleri</strong> sayfasından ekleyebilirsiniz.</div>'
+      : `<div style="background:var(--amber-bg);border-left:3px solid var(--amber);
+             padding:16px 18px;border-radius:9px;font-size:13.5px;line-height:1.7">
+          <strong style="font-size:14.5px">Operatör kontrol modülü henüz kurulmamış.</strong>
+          <p style="margin:10px 0 8px">Google Sheets tarafında tek seferlik bir kurulum gerekiyor:</p>
+          <ol style="margin-left:18px">
+            <li>Google Sheets dosyanızı açın</li>
+            <li><strong>Uzantılar &rarr; Apps Script</strong></li>
+            <li>Kod dosyasının güncel sürüm olduğundan emin olun (içinde
+                <code>operatorModuluKur</code> fonksiyonu geçmeli)</li>
+            <li>Üstteki fonksiyon listesinden <strong>operatorModuluKur</strong> seçip
+                <strong>Çalıştır</strong>'a basın</li>
+            <li>Buraya dönüp sağ üstteki yenile (&#8635;) düğmesine basın</li>
+          </ol>
+          <p style="margin-top:10px;color:var(--metin-2)">
+            Mevcut makine, bakım ve iş emri verilerinize dokunulmaz.</p>
+        </div>`;
+    return;
+  }
   if (opDurum.yil === null){
     const h = isoHafta(new Date(D.bugun + 'T12:00:00'));
     opDurum.yil = h.yil; opDurum.hafta = h.hafta;
