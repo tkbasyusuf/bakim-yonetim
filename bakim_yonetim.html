@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Güncelleme sonrası tarayıcının eski sürümü göstermesini engeller -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Bakım Yönetim Sistemi</title>
 <style>
   :root{
@@ -281,7 +285,7 @@
 <body>
 
 <header>
-  <div class="logo">Bakım Yönetim Sistemi<small>Technic 5 Elektronik San. ve Tic. A.Ş.</small></div>
+  <div class="logo">Bakım Yönetim Sistemi<small>Technic 5 Elektronik San. ve Tic. A.Ş. &middot; <span id="surumEtiket"></span></small></div>
   <div class="bosluk"></div>
   <select id="personelSec" title="İşlemi yapan kişi"></select>
   <button onclick="veriYukle(true)" title="Yenile">&#8635;</button>
@@ -593,6 +597,9 @@
    bırakırsanız uygulama ilk açılışta ekrandan sorar ve tarayıcıda
    saklar. Böylece dosya güncellendiğinde adres kaybolmaz.
    ================================================================= */
+/* Sürüm etiketi — başlıkta görünür, hangi sürümün yüklü olduğunu anlamak için */
+const SURUM = 'v2026.09.28';
+
 const GOMULU_API = '';   // isteğe bağlı: '...exec' adresi
 
 let API_URL = (localStorage.getItem('bym_api') || GOMULU_API || '').trim();
@@ -2579,6 +2586,7 @@ document.querySelectorAll('nav button').forEach(b => {
 /* =================================================================
    BAŞLAT
    ================================================================= */
+document.getElementById('surumEtiket').textContent = SURUM;
 veriYukle();
 </script>
 </body>
