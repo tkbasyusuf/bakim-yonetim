@@ -709,6 +709,13 @@ function personelListesi(){
 
 const aktifPersonel = () => document.getElementById('personelSec').value || '';
 
+/** İş emri açarken seçilebilen periyotlar — Ayarlar sayfasından okunur */
+function periyotListesi(){
+  const a = D.ayarlar.find(x => x['Anahtar'] === 'periyotlar');
+  const liste = a ? a['Değer'].split(',').map(s => s.trim()).filter(Boolean) : [];
+  return liste.length ? liste : ['Aylık','3 Aylık','6 Aylık','Yıllık'];
+}
+
 /** Bir iş emrinin checklist ilerlemesi */
 function ilerleme(no){
   const d = D.detaylar.filter(x => x['İş Emri No'] === no);
@@ -974,14 +981,18 @@ function isEmriAcModal(planId = ''){
       </div>
       <div class="alan">
         <label>Makine</label>
-        <select id="yMakine">
+        <select id="yMakine" onchange="yPeriyotDegisti()">
           ${D.makineler.map(m => `<option value="${kacis(m['Makine Kodu'])}"${pl && pl['Makine Kodu']===m['Makine Kodu']?' selected':''}>${kacis(m['Makine Kodu'])} — ${kacis(m['Makine Adı'])}</option>`).join('')}
         </select>
       </div>
       <div class="alan" id="yPeriyotAlan">
         <label>Periyot</label>
-        <select id="yPeriyot"><option>6 Aylık</option></select>
+        <select id="yPeriyot" onchange="yPeriyotDegisti()">
+          ${periyotListesi().map(x =>
+            `<option${(pl && pl['Periyot']===x) || (!pl && x==='6 Aylık') ? ' selected' : ''}>${kacis(x)}</option>`).join('')}
+        </select>
       </div>
+      <div class="alan genis" id="yMaddeBilgi" style="display:none"></div>
       <div class="alan">
         <label>Hazırlayan</label>
         <input id="yHazirlayan" value="${kacis(aktifPersonel())}">
@@ -1004,12 +1015,46 @@ function isEmriAcModal(planId = ''){
     </p>`,
     [{ metin:'İptal', sinif:'ikincil', tikla: modalKapat },
      { metin:'İş Emri Aç', sinif:'', tikla: () => isEmriOlustur(planId) }]);
+  yPeriyotDegisti();
+}
+
+/** Makinede kaç görev, verilen periyotta geçerli? */
+function gorevSayisi(kod, periyot){
+  return D.gorevler.filter(g => {
+    if (g['Makine Kodu'] !== kod) return false;
+    if (String(g['Aktif'] || 'Evet').toLowerCase() === 'hayır') return false;
+    const gp = String(g['Periyot'] || '').trim();
+    return !gp || gp === 'Tümü' || gp === periyot;
+  }).length;
+}
+
+/** İş emri açmadan önce kaç madde geleceğini göster */
+function yPeriyotDegisti(){
+  const el = document.getElementById('yMaddeBilgi');
+  if (!el) return;
+  if (document.getElementById('yTur').value !== 'Planlı'){ el.style.display = 'none'; return; }
+
+  const kod = document.getElementById('yMakine').value;
+  const per = document.getElementById('yPeriyot').value;
+  const adet = gorevSayisi(kod, per);
+
+  el.style.display = '';
+  el.innerHTML = adet
+    ? `<div style="background:var(--yesil-bg);border-left:3px solid var(--yesil);
+         padding:9px 12px;border-radius:7px;font-size:12.5px">
+        <strong>${adet} checklist maddesi</strong> otomatik gelecek.</div>`
+    : `<div style="background:var(--amber-bg);border-left:3px solid var(--amber);
+         padding:9px 12px;border-radius:7px;font-size:12.5px;line-height:1.55">
+        <strong>Bu makine için tanımlı bakım maddesi yok.</strong><br>
+        İş emri boş açılır, yapılan işi açıklama alanına yazarsın.
+        Madde eklemek için: Makineler &rarr; sicil kartı &rarr; Bakım Görevleri.</div>`;
 }
 
 function yeniTurDegisti(){
   const arizi = document.getElementById('yTur').value === 'Arızi';
   document.getElementById('yArizaAlan').style.display = arizi ? '' : 'none';
   document.getElementById('yPeriyotAlan').style.display = arizi ? 'none' : '';
+  yPeriyotDegisti();
 }
 
 async function isEmriOlustur(planId){
@@ -1035,14 +1080,24 @@ async function isEmriOlustur(planId){
 }
 
 /** İş emri detay ekranı */
-function isEmriAc(no){
+async function isEmriAc(no){
   const i = D.isEmirleri.find(x => x['İş Emri No'] === no);
   if (!i) return bildir('İş emri bulunamadı', 'hata');
   aktifIsEmri = no;
 
   const kapali = i['Durum'] === 'Kapalı';
-  const det = D.detaylar.filter(x => x['İş Emri No'] === no)
+  let det = D.detaylar.filter(x => x['İş Emri No'] === no)
     .sort((a,b) => (parseInt(a['Sıra'],10)||0) - (parseInt(b['Sıra'],10)||0));
+
+  // Kapalı iş emirlerinin detayları açılışta yüklenmez, şimdi çekilir
+  if (!det.length && kapali){
+    yukle(true, 'İş emri açılıyor...');
+    try {
+      det = await api('isEmriDetay', { isEmriNo: no });
+      D.detaylar = D.detaylar.concat(det);
+    } catch(e){ bildir(e.message, 'hata'); }
+    finally { yukle(false); }
+  }
   const kul = D.kullanim.filter(x => x['İş Emri No'] === no);
 
   const ro = kapali ? ' readonly' : '';
@@ -1561,6 +1616,7 @@ function makineDetay(kod){
   const m = D.makineler.find(x => x['Makine Kodu'] === kod);
   if (!m) return;
   const gorevler = D.gorevler.filter(g => g['Makine Kodu'] === kod);
+  const opGorevler = (D.opGorevler || []).filter(g => g['Makine Kodu'] === kod);
   const parcalar = D.parcalar.filter(p => p['Makine Kodu'] === kod);
   const gecmis = D.isEmirleri.filter(i => i['Makine Kodu'] === kod)
     .sort((a,b) => String(b['Kayıt Tarihi']).localeCompare(String(a['Kayıt Tarihi'])));
@@ -1606,19 +1662,165 @@ function makineDetay(kod){
       </tr>`).join('') : '<tr><td colspan="5" class="bos">Bakım kaydı yok.</td></tr>'}</tbody>
     </table></div>
 
-    <div class="bolum">4 — Bakım Görevleri (${gorevler.length} madde)</div>
+    <div class="bolum">4 — Bakım Görevleri (${gorevler.length} madde)
+      <button class="btn kucuk" style="float:right;text-transform:none;letter-spacing:0"
+        onclick="gorevDuzenle('','${kacis(kod)}')">+ Madde Ekle</button></div>
     <div class="tablo-sar"><table>
-      <thead><tr><th width="40">No</th><th>Faaliyet</th><th width="90">Periyot</th><th width="90">Tip</th></tr></thead>
-      <tbody>${gorevler.length ? gorevler.map(g => `<tr>
-        <td>${kacis(g['Sıra'])}</td><td>${kacis(g['Faaliyet'])}</td>
-        <td>${kacis(g['Periyot'])}</td><td>${kacis(g['Tip'])}</td>
-      </tr>`).join('') : '<tr><td colspan="4" class="bos">Görev tanımlı değil.</td></tr>'}</tbody>
-    </table></div>`,
+      <thead><tr><th width="40">No</th><th>Faaliyet</th><th width="90">Periyot</th>
+        <th width="90">Tip</th><th width="60">Aktif</th><th width="70"></th></tr></thead>
+      <tbody>${gorevler.length
+        ? gorevler.sort((a,b)=>(parseInt(a['Sıra'],10)||0)-(parseInt(b['Sıra'],10)||0)).map(g => `<tr>
+            <td>${kacis(g['Sıra'])}</td><td>${kacis(g['Faaliyet'])}</td>
+            <td>${kacis(g['Periyot'] || 'Tümü')}</td><td>${kacis(g['Tip'])}</td>
+            <td>${String(g['Aktif']||'Evet').toLowerCase()==='hayır'
+                  ? '<span class="rozet gri">Pasif</span>' : '<span class="rozet yesil">Evet</span>'}</td>
+            <td style="text-align:right"><button class="btn kucuk ikincil"
+              onclick="gorevDuzenle('${kacis(g['Görev ID'])}','${kacis(kod)}')">Düzenle</button></td>
+          </tr>`).join('')
+        : '<tr><td colspan="6" class="bos">Görev tanımlı değil. "+ Madde Ekle" ile başlayabilirsiniz.</td></tr>'}</tbody>
+    </table></div>
+    <p style="margin-top:9px;font-size:12px;color:var(--metin-2)">
+      Periyodu <strong>Tümü</strong> olan maddeler her periyotta gelir.
+      Sadece belirli bir periyotta gelmesini isterseniz o periyodu seçin.</p>
+
+    <div class="bolum">5 — Operatör Kontrol Görevleri (${opGorevler.length} madde)
+      <button class="btn kucuk" style="float:right;text-transform:none;letter-spacing:0"
+        onclick="opGorevDuzenle('','${kacis(kod)}')">+ Madde Ekle</button></div>
+    <div class="tablo-sar"><table>
+      <thead><tr><th width="40">No</th><th>Faaliyet</th><th width="90">Periyot</th>
+        <th width="60">Aktif</th><th width="70"></th></tr></thead>
+      <tbody>${opGorevler.length
+        ? opGorevler.sort((a,b)=>{
+            if(a['Periyot']!==b['Periyot']) return a['Periyot']==='Günlük'?-1:1;
+            return (parseInt(a['Sıra'],10)||0)-(parseInt(b['Sıra'],10)||0);
+          }).map(g => `<tr>
+            <td>${kacis(g['Sıra'])}</td><td>${kacis(g['Faaliyet'])}</td>
+            <td><span class="rozet ${g['Periyot']==='Haftalık'?'amber':'mavi'}">${kacis(g['Periyot'])}</span></td>
+            <td>${String(g['Aktif']||'Evet').toLowerCase()==='hayır'
+                  ? '<span class="rozet gri">Pasif</span>' : '<span class="rozet yesil">Evet</span>'}</td>
+            <td style="text-align:right"><button class="btn kucuk ikincil"
+              onclick="opGorevDuzenle('${kacis(g['Görev ID'])}','${kacis(kod)}')">Düzenle</button></td>
+          </tr>`).join('')
+        : '<tr><td colspan="5" class="bos">Operatör görevi tanımlı değil.</td></tr>'}</tbody>
+    </table></div>
+    <p style="margin-top:9px;font-size:12px;color:var(--metin-2)">
+      Değişiklikler yalnızca bundan sonra açılacak çizelgeleri etkiler, geçmiş kayıtlar olduğu gibi kalır.</p>`,
     [{ metin:'Düzenle', sinif:'ikincil', tikla:() => makineDuzenle(kod) },
      { metin:'Arızi İş Emri Aç', sinif:'', tikla:() => { modalKapat(); setTimeout(() => {
         isEmriAcModal(); document.getElementById('yTur').value = 'Arızi';
         document.getElementById('yMakine').value = kod; yeniTurDegisti(); }, 60); }},
      { metin:'Kapat', sinif:'ikincil', tikla: modalKapat }]);
+}
+
+/* ---- Bakım görevi ekle / düzenle ---- */
+function gorevDuzenle(gorevId, makineKodu){
+  const g = gorevId ? D.gorevler.find(x => x['Görev ID'] === gorevId) : {};
+  const mevcut = D.gorevler.filter(x => x['Makine Kodu'] === makineKodu);
+  const sonrakiSira = mevcut.length
+    ? Math.max(...mevcut.map(x => parseInt(x['Sıra'],10) || 0)) + 1 : 1;
+  const tipler = ['Kontrol','Temizlik','Değişim','Kalibrasyon','Ayar','Yağlama'];
+  const periyotlar = ['Tümü'].concat(periyotListesi());
+
+  modalAc(gorevId ? 'Bakım Maddesini Düzenle' : 'Yeni Bakım Maddesi', `
+    <div class="alan genis">
+      <label>Faaliyet *</label>
+      <textarea id="grFaaliyet" style="min-height:90px"
+        placeholder="Örn: Hidrolik yağ seviyesi gözle kontrol edilir.">${kacis(g['Faaliyet'] || '')}</textarea>
+    </div>
+    <div class="form-izgara" style="margin-top:13px">
+      <div class="alan"><label>Periyot</label>
+        <select id="grPeriyot">${periyotlar.map(x =>
+          `<option${(g['Periyot']||'Tümü')===x?' selected':''}>${kacis(x)}</option>`).join('')}</select></div>
+      <div class="alan"><label>Tip</label>
+        <select id="grTip">${tipler.map(x =>
+          `<option${(g['Tip']||'Kontrol')===x?' selected':''}>${kacis(x)}</option>`).join('')}</select></div>
+      <div class="alan"><label>Sıra</label>
+        <input type="number" id="grSira" min="1" value="${kacis(g['Sıra'] || sonrakiSira)}"></div>
+      <div class="alan"><label>Aktif</label>
+        <select id="grAktif">
+          <option value="Evet"${String(g['Aktif']||'Evet').toLowerCase()!=='hayır'?' selected':''}>Evet</option>
+          <option value="Hayır"${String(g['Aktif']||'').toLowerCase()==='hayır'?' selected':''}>Hayır — çizelgede görünmesin</option>
+        </select></div>
+    </div>
+    <p style="margin-top:13px;font-size:12.5px;color:var(--metin-2);line-height:1.55">
+      Periyodu <strong>Tümü</strong> bırakırsan madde aylık, 3 aylık, 6 aylık ve yıllık
+      iş emirlerinin hepsinde gelir. Açık iş emirleri bu değişiklikten etkilenmez.</p>`,
+    [...(gorevId ? [{ metin:'Sil', sinif:'tehlike', tikla: async () => {
+        if (!confirm('Bu bakım maddesi silinecek. Geçmiş iş emirleri etkilenmez. Emin misiniz?')) return;
+        yukle(true);
+        try { await api('gorevSil',{gorevId}); await veriYukle(); makineDetay(makineKodu); bildir('Silindi','basari'); }
+        catch(e){ bildir(e.message,'hata'); } finally { yukle(false); }
+     }}] : []),
+     { metin:'Vazgeç', sinif:'ikincil', tikla:() => makineDetay(makineKodu) },
+     { metin:'Kaydet', sinif:'', tikla: async () => {
+        const yeni = {
+          'Görev ID'   : gorevId || '',
+          'Makine Kodu': makineKodu,
+          'Periyot'    : document.getElementById('grPeriyot').value,
+          'Sıra'       : document.getElementById('grSira').value,
+          'Faaliyet'   : document.getElementById('grFaaliyet').value.trim(),
+          'Tip'        : document.getElementById('grTip').value,
+          'Aktif'      : document.getElementById('grAktif').value
+        };
+        if (!yeni['Faaliyet']) return bildir('Faaliyet metni zorunlu', 'hata');
+        yukle(true);
+        try { await api('gorevKaydet',{gorev:yeni}); await veriYukle(); makineDetay(makineKodu); bildir('Kaydedildi','basari'); }
+        catch(e){ bildir(e.message,'hata'); } finally { yukle(false); }
+     }}], true);
+}
+
+/* ---- Operatör kontrol görevi ekle / düzenle ---- */
+function opGorevDuzenle(gorevId, makineKodu){
+  const g = gorevId ? (D.opGorevler||[]).find(x => x['Görev ID'] === gorevId) : {};
+  const per = g['Periyot'] || 'Günlük';
+  const mevcut = (D.opGorevler||[]).filter(x => x['Makine Kodu'] === makineKodu && x['Periyot'] === per);
+  const sonrakiSira = mevcut.length
+    ? Math.max(...mevcut.map(x => parseInt(x['Sıra'],10) || 0)) + 1 : 1;
+
+  modalAc(gorevId ? 'Operatör Maddesini Düzenle' : 'Yeni Operatör Maddesi', `
+    <div class="alan genis">
+      <label>Faaliyet *</label>
+      <textarea id="ogFaaliyet" style="min-height:90px"
+        placeholder="Örn: Hava hortumlarında çatlak olup olmadığı kontrol edilir.">${kacis(g['Faaliyet'] || '')}</textarea>
+    </div>
+    <div class="form-izgara" style="margin-top:13px">
+      <div class="alan"><label>Periyot</label>
+        <select id="ogPeriyot">
+          <option${per==='Günlük'?' selected':''}>Günlük</option>
+          <option${per==='Haftalık'?' selected':''}>Haftalık</option>
+        </select></div>
+      <div class="alan"><label>Sıra</label>
+        <input type="number" id="ogSira" min="1" value="${kacis(g['Sıra'] || sonrakiSira)}"></div>
+      <div class="alan"><label>Aktif</label>
+        <select id="ogAktif">
+          <option value="Evet"${String(g['Aktif']||'Evet').toLowerCase()!=='hayır'?' selected':''}>Evet</option>
+          <option value="Hayır"${String(g['Aktif']||'').toLowerCase()==='hayır'?' selected':''}>Hayır</option>
+        </select></div>
+    </div>
+    <p style="margin-top:13px;font-size:12.5px;color:var(--metin-2);line-height:1.55">
+      Günlük maddeler Pazartesi–Cuma işaretlenir, haftalık maddeler yalnızca cuma.
+      Açılmış çizelgeler değişmez; yeni haftalarda geçerli olur.</p>`,
+    [...(gorevId ? [{ metin:'Sil', sinif:'tehlike', tikla: async () => {
+        if (!confirm('Bu operatör maddesi silinecek. Geçmiş çizelgeler etkilenmez. Emin misiniz?')) return;
+        yukle(true);
+        try { await api('opGorevSil',{gorevId}); await veriYukle(); makineDetay(makineKodu); bildir('Silindi','basari'); }
+        catch(e){ bildir(e.message,'hata'); } finally { yukle(false); }
+     }}] : []),
+     { metin:'Vazgeç', sinif:'ikincil', tikla:() => makineDetay(makineKodu) },
+     { metin:'Kaydet', sinif:'', tikla: async () => {
+        const yeni = {
+          'Görev ID'   : gorevId || '',
+          'Makine Kodu': makineKodu,
+          'Periyot'    : document.getElementById('ogPeriyot').value,
+          'Sıra'       : document.getElementById('ogSira').value,
+          'Faaliyet'   : document.getElementById('ogFaaliyet').value.trim(),
+          'Aktif'      : document.getElementById('ogAktif').value
+        };
+        if (!yeni['Faaliyet']) return bildir('Faaliyet metni zorunlu', 'hata');
+        yukle(true);
+        try { await api('opGorevKaydet',{gorev:yeni}); await veriYukle(); makineDetay(makineKodu); bildir('Kaydedildi','basari'); }
+        catch(e){ bildir(e.message,'hata'); } finally { yukle(false); }
+     }}], true);
 }
 
 function makineDuzenle(kod = ''){
@@ -1778,11 +1980,12 @@ async function raporCiz(){
 
   const toplamDurus = ie.reduce((t,i) => t + (parseFloat(i['Duruş (dk)'])||0), 0);
 
-  const noSet = new Set(ie.map(i => i['İş Emri No']));
-  const detaylar = D.detaylar.filter(d => noSet.has(d['İş Emri No']));
-  const uygunsuzlar = detaylar.filter(d => d['Sonuç'] === 'Uygun Değil');
-  const uygunsuzOran = detaylar.filter(d => d['Sonuç']).length
-    ? Math.round(uygunsuzlar.length / detaylar.filter(d => d['Sonuç']).length * 100) : 0;
+  // Checklist uygunsuzlukları backend'de hesaplanır (detaylar artık açılışta taşınmıyor)
+  let ieRapor = { isaretli:0, uygunsuzluklar:[], makineUygunsuz:{} };
+  try { ieRapor = await api('isEmriRapor', { yil }); } catch(e){}
+  const uygunsuzlar = ieRapor.uygunsuzluklar;
+  const uygunsuzOran = ieRapor.isaretli
+    ? Math.round(uygunsuzlar.length / ieRapor.isaretli * 100) : 0;
 
   document.getElementById('raporKutular').innerHTML = `
     <div class="kutu ${uyum>=80?'iyi':uyum>=50?'uyari':'kritik'}">
@@ -1815,8 +2018,7 @@ async function raporCiz(){
     const sure = mie.reduce((t,i) => t + (parseFloat(i['Süre (dk)'])||0), 0);
     const aSure = ma.filter(i => parseFloat(i['Süre (dk)'])>0).map(i => parseFloat(i['Süre (dk)']));
     const mMttr = aSure.length ? Math.round(aSure.reduce((a,b)=>a+b,0)/aSure.length) : 0;
-    const mNo = new Set(mie.map(i => i['İş Emri No']));
-    const mu = D.detaylar.filter(d => mNo.has(d['İş Emri No']) && d['Sonuç']==='Uygun Değil').length;
+    const mu = ieRapor.makineUygunsuz[kod] || 0;
     return `<tr>
       <td><strong>${kacis(kod)}</strong><br><span style="color:var(--metin-2);font-size:12px">${kacis(m['Makine Adı'])}</span></td>
       <td>${mp}</td>
@@ -1848,14 +2050,11 @@ async function raporCiz(){
 
   // Uygunsuzluk listesi
   document.getElementById('raporUygunsuz').innerHTML = uygunsuzlar.length
-    ? uygunsuzlar.map(d => {
-        const i = D.isEmirleri.find(x => x['İş Emri No'] === d['İş Emri No']) || {};
-        return `<tr class="tiklanir" onclick="isEmriAc('${kacis(d['İş Emri No'])}')">
-          <td>${kacis(d['İş Emri No'])}</td>
-          <td>${kacis(i['Makine Kodu'])}</td>
-          <td>${kacis(d['Faaliyet'])}</td>
-          <td>${kacis(d['Not'] || '—')}</td></tr>`;
-      }).join('')
+    ? uygunsuzlar.map(d => `<tr class="tiklanir" onclick="isEmriAc('${kacis(d.isEmriNo)}')">
+          <td>${kacis(d.isEmriNo)}</td>
+          <td>${kacis(d.makine)}</td>
+          <td>${kacis(d.faaliyet)}</td>
+          <td>${kacis(d.not || '—')}</td></tr>`).join('')
     : '<tr><td colspan="4" class="bos">Uygunsuzluk kaydı yok.</td></tr>';
 }
 
