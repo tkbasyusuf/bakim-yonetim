@@ -787,7 +787,15 @@ async function veriYukle(bildirGoster = false){
   if (!API_URL) { baglantiAyari(true); return; }
   yukle(true, 'Veriler yükleniyor...');
   try {
-    D = await api('getAll');
+    // Ana veri ile panel özeti aynı anda istenir — biri diğerini beklemez.
+    // Hafta hesabı için cihazın tarihi yeterli, sunucu tarihini beklemeye gerek yok.
+    const h = isoHafta(new Date());
+    const [veri, ozet] = await Promise.all([
+      api('getAll'),
+      api('opOzet', { yil: h.yil, hafta: h.hafta }).catch(() => null)
+    ]);
+    D = veri;
+    opOzetOnbellek = ozet;
     ['fIsEmriMakine','fParcaMakine'].forEach(id => {
       const s = document.getElementById(id);
       const eski = s.value;
@@ -838,9 +846,17 @@ async function veriYukle(bildirGoster = false){
   }
 }
 
+/**
+ *  Açılışta yalnızca ağ isteği gerektirmeyen ekranlar çizilir.
+ *  Raporlar kendi verisini ayrıca çektiği için o sekmeye
+ *  tıklanana kadar bekletilir — açılışı gereksiz yere uzatmasın.
+ */
+let raporTazeMi = false;
+
 function hepsiniCiz(){
   panelCiz(); isEmriListele(); planListele();
-  makineListele(); parcaListele(); raporCiz();
+  makineListele(); parcaListele();
+  raporTazeMi = false;                    // rapor sekmesi açılınca tazelenecek
 }
 
 /* =================================================================
@@ -1970,6 +1986,12 @@ function parcaDuzenle(kod = ''){
    ================================================================= */
 async function raporCiz(){
   const yil = document.getElementById('fRaporYil').value;
+  yukle(true, 'Raporlar hesaplanıyor...');
+  try { await raporCizIc(yil); }
+  finally { yukle(false); }
+}
+
+async function raporCizIc(yil){
   const ie = D.isEmirleri.filter(i => String(i['Kayıt Tarihi']).substring(0,4) === String(yil));
   const planli = ie.filter(i => i['İşin Türü'] === 'Planlı');
   const arizi  = ie.filter(i => i['İşin Türü'] === 'Arızi');
@@ -2081,15 +2103,23 @@ function dolulukCubuk(dolu, toplam){
   </div>`;
 }
 
+/** veriYukle sırasında getAll ile paralel çekilen özet burada bekler */
+let opOzetOnbellek = null;
+
 async function panelOpCiz(){
   if (!D.opGorevler || !D.opGorevler.length){
     document.getElementById('kartOpHafta').style.display = 'none';
     return;
   }
   const h = isoHafta(new Date(D.bugun + 'T12:00:00'));
-  let s;
-  try { s = await api('opOzet', { yil:h.yil, hafta:h.hafta }); }
-  catch(e){ document.getElementById('kartOpHafta').style.display = 'none'; return; }
+
+  // Açılışta paralel çekilmişse onu kullan, yoksa şimdi iste
+  let s = opOzetOnbellek;
+  opOzetOnbellek = null;
+  if (!s || String(s.hafta) !== String(h.hafta) || String(s.yil) !== String(h.yil)){
+    try { s = await api('opOzet', { yil:h.yil, hafta:h.hafta }); }
+    catch(e){ document.getElementById('kartOpHafta').style.display = 'none'; return; }
+  }
 
   if (!s.makineler || !s.makineler.length){
     document.getElementById('kartOpHafta').style.display = 'none';
@@ -2578,8 +2608,9 @@ document.querySelectorAll('nav button').forEach(b => {
     b.classList.add('aktif');
     document.getElementById('s-' + b.dataset.sayfa).classList.add('aktif');
     window.scrollTo(0,0);
-    // Operatör çizelgesi ilk açılışta yüklenir
+    // Ağ isteği gerektiren ekranlar ancak açıldıklarında yüklenir
     if (b.dataset.sayfa === 'operator' && !opDurum.satirlar.length) opYukle();
+    if (b.dataset.sayfa === 'rapor' && !raporTazeMi) { raporTazeMi = true; raporCiz(); }
   };
 });
 
