@@ -598,7 +598,7 @@
    saklar. Böylece dosya güncellendiğinde adres kaybolmaz.
    ================================================================= */
 /* Sürüm etiketi — başlıkta görünür, hangi sürümün yüklü olduğunu anlamak için */
-const SURUM = 'v2026.09.28';
+const SURUM = 'v2026.09.30';
 
 const GOMULU_API = '';   // isteğe bağlı: '...exec' adresi
 
@@ -619,44 +619,86 @@ const AYLAR = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran',
    ================================================================= */
 const bekle = ms => new Promise(r => setTimeout(r, ms));
 
-/**
- *  Apps Script ara sıra geçici hata döndürür (eşzamanlı istek, ağ kesintisi).
- *  Bu tür hatalarda sessizce iki kez daha dener; kalıcı hatada hemen vazgeçer.
- */
-async function api(action, payload = {}, deneme = 0) {
+/* =================================================================
+   SUNUCU İLETİŞİMİ
+
+   POST istekleri Apps Script'in yönlendirme adımında takılıyordu
+   (yönlendirme cevabı 25-30 sn sürüyor, bazen geçersiz adres dönüp
+   404 veriyordu). Bunun yerine istek bir <script> etiketi ile
+   gönderiliyor: tarayıcı yönlendirmeyi kendisi, sorunsuz izliyor.
+
+   Veri URL üzerinden gittiği için uzunluk sınırı var; nadiren de olsa
+   çok uzun bir gönderi olursa eski POST yöntemine düşülür.
+   ================================================================= */
+const URL_SINIRI = 7000;
+let jsonpSayac = 0;
+
+function jsonpIstek(action, payload, zamanAsimi = 45000){
+  return new Promise((cozumle, reddet) => {
+    const fn = '__bym' + (++jsonpSayac) + '_' + Date.now();
+    const s  = document.createElement('script');
+    let bitti = false, sayac = null;
+
+    const temizle = () => {
+      bitti = true;
+      clearTimeout(sayac);
+      try { delete window[fn]; } catch(x){ window[fn] = undefined; }
+      if (s.parentNode) s.parentNode.removeChild(s);
+    };
+
+    window[fn] = sonuc => {
+      if (bitti) return;
+      temizle();
+      if (!sonuc || !sonuc.ok) reddet(new Error((sonuc && sonuc.hata) || 'Bilinmeyen hata'));
+      else cozumle(sonuc.data);
+    };
+
+    s.onerror = () => { if (!bitti){ temizle(); reddet(new Error('AGHATASI')); } };
+    sayac = setTimeout(() => { if (!bitti){ temizle(); reddet(new Error('AGHATASI')); } }, zamanAsimi);
+
+    s.src = API_URL + '?callback=' + fn +
+            '&action='  + encodeURIComponent(action) +
+            '&payload=' + encodeURIComponent(JSON.stringify(payload)) +
+            '&t=' + Date.now();
+    document.head.appendChild(s);
+  });
+}
+
+/** Uzun gönderiler için yedek yol */
+async function postIstek(action, payload){
+  const yanit = await fetch(API_URL, {
+    method : 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body   : JSON.stringify(Object.assign({ action }, payload))
+  });
+  if (!yanit.ok) throw new Error('AGHATASI');
+  const sonuc = JSON.parse(await yanit.text());
+  if (!sonuc.ok) throw new Error(sonuc.hata || 'Bilinmeyen hata');
+  return sonuc.data;
+}
+
+async function api(action, payload = {}, deneme = 0){
   if (!API_URL) throw new Error('Bağlantı adresi ayarlanmamış.');
-  const govde = Object.assign({ action }, payload);
+
+  const uzunluk = encodeURIComponent(JSON.stringify(payload)).length;
 
   try {
-    const yanit = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(govde)
-    });
-    if (!yanit.ok) throw new Error('GECICI:' + yanit.status);
-
-    const metin = await yanit.text();
-    let sonuc;
-    try { sonuc = JSON.parse(metin); }
-    catch(x) { throw new Error('GECICI:bozuk-yanit'); }
-
-    if (!sonuc.ok) {
-      const h = sonuc.hata || 'Bilinmeyen hata';
-      // Kilit çakışması geçicidir, tekrar denenebilir
-      if (h.indexOf('başka bir kaydı işliyor') >= 0) throw new Error('GECICI:kilit');
-      throw new Error(h);
-    }
-    return sonuc.data;
+    return uzunluk > URL_SINIRI
+      ? await postIstek(action, payload)
+      : await jsonpIstek(action, payload);
 
   } catch(e){
-    const gecici = String(e.message).indexOf('GECICI:') === 0 ||
-                   e.name === 'TypeError';           // ağ kesintisi
-    if (gecici && deneme < 2) {
+    const mesaj  = String(e.message);
+    const gecici = mesaj === 'AGHATASI' ||
+                   mesaj.indexOf('başka bir kaydı işliyor') >= 0 ||
+                   e.name === 'TypeError';
+
+    if (gecici && deneme < 2){
       await bekle(700 * (deneme + 1));
       return api(action, payload, deneme + 1);
     }
-    if (String(e.message).indexOf('GECICI:') === 0) {
-      throw new Error('Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.');
+    if (mesaj === 'AGHATASI'){
+      throw new Error('Sunucuya ulaşılamadı. Bağlantınızı kontrol edip tekrar deneyin.');
     }
     throw e;
   }
