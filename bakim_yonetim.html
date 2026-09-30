@@ -592,17 +592,20 @@
 
 <script>
 /* =================================================================
-   BAĞLANTI AYARI
-   Apps Script dağıtım adresini buraya yapıştırabilirsiniz; boş
-   bırakırsanız uygulama ilk açılışta ekrandan sorar ve tarayıcıda
-   saklar. Böylece dosya güncellendiğinde adres kaybolmaz.
+   BAĞLANTI AYARI — Supabase
+
+   Adresi ve anahtarı buraya gömebilirsiniz; boş bırakılırsa
+   uygulama ilk açılışta ekrandan sorar ve tarayıcıda saklar.
+   anon anahtarı tarayıcıda görünmek üzere tasarlanmıştır,
+   gizli değildir. service_role anahtarı ASLA buraya yazılmaz.
    ================================================================= */
-/* Sürüm etiketi — başlıkta görünür, hangi sürümün yüklü olduğunu anlamak için */
-const SURUM = 'v2026.09.30';
+const SURUM = 'v2026.10.01';
 
-const GOMULU_API = '';   // isteğe bağlı: '...exec' adresi
+const GOMULU_URL = 'https://nynzlfdzolylocxzcuav.supabase.co';  // Technic 5 projesi
+const GOMULU_KEY = '';   // anon public anahtarı — uygulamada "Bağlantı" ekranından girilir
 
-let API_URL = (localStorage.getItem('bym_api') || GOMULU_API || '').trim();
+let SB_URL = (localStorage.getItem('bym_sb_url') || GOMULU_URL || '').trim().replace(/\/+$/,'');
+let SB_KEY = (localStorage.getItem('bym_sb_key') || GOMULU_KEY || '').trim();
 
 /* =================================================================
    DURUM
@@ -620,89 +623,149 @@ const AYLAR = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran',
 const bekle = ms => new Promise(r => setTimeout(r, ms));
 
 /* =================================================================
-   SUNUCU İLETİŞİMİ
+   VERİTABANI KATMANI — Supabase (PostgREST)
 
-   POST istekleri Apps Script'in yönlendirme adımında takılıyordu
-   (yönlendirme cevabı 25-30 sn sürüyor, bazen geçersiz adres dönüp
-   404 veriyordu). Bunun yerine istek bir <script> etiketi ile
-   gönderiliyor: tarayıcı yönlendirmeyi kendisi, sorunsuz izliyor.
-
-   Veri URL üzerinden gittiği için uzunluk sınırı var; nadiren de olsa
-   çok uzun bir gönderi olursa eski POST yöntemine düşülür.
+   Veritabanı sütunları ASCII (makine_kodu), arayüz ise Türkçe
+   başlıklarla çalışıyor ('Makine Kodu'). Aradaki çeviriyi burası
+   yapar; ekran kodlarının hiçbiri değişmez.
    ================================================================= */
-const URL_SINIRI = 7000;
-let jsonpSayac = 0;
 
-function jsonpIstek(action, payload, zamanAsimi = 45000){
-  return new Promise((cozumle, reddet) => {
-    const fn = '__bym' + (++jsonpSayac) + '_' + Date.now();
-    const s  = document.createElement('script');
-    let bitti = false, sayac = null;
+const ALANLAR = {
+  makineler: {
+    makine_kodu:'Makine Kodu', makine_adi:'Makine Adı', marka_model:'Marka / Model',
+    seri_no:'Seri No', uretici:'Üretici / Tedarikçi', kurulum_tarihi:'Kurulum Tarihi',
+    bolum:'Bölüm', kritiklik:'Kritiklik', sorumlu_operator:'Sorumlu Operatör',
+    talimat_kodu:'Bakım Talimat Kodu', durum:'Durum', foto_url:'Foto URL', notlar:'Notlar'
+  },
+  bakim_gorevleri: {
+    gorev_id:'Görev ID', makine_kodu:'Makine Kodu', periyot:'Periyot',
+    sira:'Sıra', faaliyet:'Faaliyet', tip:'Tip', aktif:'Aktif'
+  },
+  bakim_plani: {
+    plan_id:'Plan ID', makine_kodu:'Makine Kodu', periyot:'Periyot', yil:'Yıl',
+    planlanan_tarih:'Planlanan Tarih', durum:'Durum', is_emri_no:'İş Emri No',
+    gerceklesen_tarih:'Gerçekleşen Tarih', erteleme_gerekcesi:'Erteleme Gerekçesi'
+  },
+  is_emirleri: {
+    is_emri_no:'İş Emri No', kayit_tarihi:'Kayıt Tarihi', isin_turu:'İşin Türü',
+    periyot:'Periyot', makine_kodu:'Makine Kodu', plan_id:'Plan ID',
+    planlanan_baslangic:'Planlanan Başlangıç', planlanan_bitis:'Planlanan Bitiş',
+    fiili_baslangic:'Fiili Başlangıç', fiili_bitis:'Fiili Bitiş',
+    sure_dk:'Süre (dk)', durus_dk:'Duruş (dk)', hazirlayan:'Hazırlayan', yapan:'Yapan',
+    ariza_tanimi:'Arıza Tanımı', aciklama:'Açıklama / Kök Neden',
+    makine_calisir:'Makine Çalışır mı', durum:'Durum',
+    bakim_onayi:'Bakım Personeli Onayı', uretim_onayi:'Üretim Sorumlusu Onayı',
+    kapanis_tarihi:'Kapanış Tarihi'
+  },
+  is_emri_detay: {
+    is_emri_no:'İş Emri No', sira:'Sıra', faaliyet:'Faaliyet',
+    tip:'Tip', sonuc:'Sonuç', not_metni:'Not'
+  },
+  yedek_parca: {
+    parca_kodu:'Parça Kodu', parca_adi:'Parça Adı', tedarikci:'Tedarikçi',
+    makine_kodu:'Makine Kodu', makinedeki_adet:'Makinedeki Miktar',
+    stok:'Stok Miktar', min_stok:'Min Stok', birim:'Birim', notlar:'Notlar'
+  },
+  parca_kullanim: {
+    kayit_id:'Kayıt ID', is_emri_no:'İş Emri No', tarih:'Tarih',
+    parca_kodu:'Parça Kodu', parca_adi:'Parça Adı', tedarikci:'Tedarikçi',
+    makine_kodu:'Makine Kodu', miktar:'Miktar', birim:'Birim'
+  },
+  ayarlar: { anahtar:'Anahtar', deger:'Değer', aciklama:'Açıklama' },
+  operator_gorevleri: {
+    gorev_id:'Görev ID', makine_kodu:'Makine Kodu', periyot:'Periyot',
+    sira:'Sıra', faaliyet:'Faaliyet', aktif:'Aktif'
+  },
+  operator_kontrol: {
+    kayit_id:'Kayıt ID', makine_kodu:'Makine Kodu', yil:'Yıl', hafta:'Hafta',
+    gorev_id:'Görev ID', periyot:'Periyot', sira:'Sıra', faaliyet:'Faaliyet',
+    pzt:'Pzt', sal:'Sal', car:'Çar', per:'Per', cum:'Cum', not_metni:'Not'
+  },
+  operator_onay: {
+    onay_id:'Onay ID', makine_kodu:'Makine Kodu', yil:'Yıl', hafta:'Hafta',
+    onay_tarihi:'Onay Tarihi', aciklama:'Açıklama', onaylayan:'Onaylayan'
+  }
+};
 
-    const temizle = () => {
-      bitti = true;
-      clearTimeout(sayac);
-      try { delete window[fn]; } catch(x){ window[fn] = undefined; }
-      if (s.parentNode) s.parentNode.removeChild(s);
-    };
+/** Veritabanı satırı → arayüz nesnesi */
+function dbden(tablo, satir){
+  const harita = ALANLAR[tablo], o = {};
+  for (const db in harita) o[harita[db]] = satir[db] === null ? '' : satir[db];
+  return o;
+}
+const dbdenListe = (tablo, satirlar) => (satirlar || []).map(s => dbden(tablo, s));
 
-    window[fn] = sonuc => {
-      if (bitti) return;
-      temizle();
-      if (!sonuc || !sonuc.ok) reddet(new Error((sonuc && sonuc.hata) || 'Bilinmeyen hata'));
-      else cozumle(sonuc.data);
-    };
-
-    s.onerror = () => { if (!bitti){ temizle(); reddet(new Error('AGHATASI')); } };
-    sayac = setTimeout(() => { if (!bitti){ temizle(); reddet(new Error('AGHATASI')); } }, zamanAsimi);
-
-    s.src = API_URL + '?callback=' + fn +
-            '&action='  + encodeURIComponent(action) +
-            '&payload=' + encodeURIComponent(JSON.stringify(payload)) +
-            '&t=' + Date.now();
-    document.head.appendChild(s);
-  });
+/** Arayüz nesnesi → veritabanı satırı (yalnızca verilen alanlar) */
+function dbye(tablo, obj){
+  const harita = ALANLAR[tablo], o = {};
+  for (const db in harita){
+    const ad = harita[db];
+    if (obj[ad] === undefined) continue;
+    let v = obj[ad];
+    if (v === '') {
+      // Tarih ve sayı sütunlarında boş metin geçersizdir
+      if (/(_tarih|_tarihi|baslangic|bitis)$/.test(db)) v = null;
+      else if (/^(yil|hafta|sira|sure_dk|durus_dk)$/.test(db)) v = null;
+      else if (/^(stok|min_stok|makinedeki_adet|miktar)$/.test(db)) v = 0;
+    }
+    o[db] = v;
+  }
+  return o;
 }
 
-/** Uzun gönderiler için yedek yol */
-async function postIstek(action, payload){
-  const yanit = await fetch(API_URL, {
-    method : 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body   : JSON.stringify(Object.assign({ action }, payload))
-  });
-  if (!yanit.ok) throw new Error('AGHATASI');
-  const sonuc = JSON.parse(await yanit.text());
-  if (!sonuc.ok) throw new Error(sonuc.hata || 'Bilinmeyen hata');
-  return sonuc.data;
-}
+/** Supabase REST çağrısı */
+async function sb(yol, secenek = {}, deneme = 0){
+  if (!SB_URL || !SB_KEY) throw new Error('Veritabanı bağlantısı ayarlanmamış.');
 
-async function api(action, payload = {}, deneme = 0){
-  if (!API_URL) throw new Error('Bağlantı adresi ayarlanmamış.');
-
-  const uzunluk = encodeURIComponent(JSON.stringify(payload)).length;
+  const basliklar = {
+    apikey: SB_KEY,
+    Authorization: 'Bearer ' + SB_KEY,
+    'Content-Type': 'application/json'
+  };
+  if (secenek.prefer) basliklar.Prefer = secenek.prefer;
 
   try {
-    return uzunluk > URL_SINIRI
-      ? await postIstek(action, payload)
-      : await jsonpIstek(action, payload);
+    const yanit = await fetch(SB_URL + '/rest/v1/' + yol, {
+      method : secenek.method || 'GET',
+      headers: basliklar,
+      body   : secenek.body ? JSON.stringify(secenek.body) : undefined
+    });
+
+    if (!yanit.ok){
+      const metin = await yanit.text();
+      let mesaj = metin;
+      try { const j = JSON.parse(metin); mesaj = j.message || j.hint || j.details || metin; } catch(x){}
+      if (yanit.status >= 500) throw new Error('AGHATASI');
+      throw new Error(mesaj || ('Veritabanı hatası: ' + yanit.status));
+    }
+
+    if (yanit.status === 204) return null;
+    const metin = await yanit.text();
+    return metin ? JSON.parse(metin) : null;
 
   } catch(e){
-    const mesaj  = String(e.message);
-    const gecici = mesaj === 'AGHATASI' ||
-                   mesaj.indexOf('başka bir kaydı işliyor') >= 0 ||
-                   e.name === 'TypeError';
-
+    const gecici = String(e.message) === 'AGHATASI' || e.name === 'TypeError';
     if (gecici && deneme < 2){
-      await bekle(700 * (deneme + 1));
-      return api(action, payload, deneme + 1);
+      await bekle(500 * (deneme + 1));
+      return sb(yol, secenek, deneme + 1);
     }
-    if (mesaj === 'AGHATASI'){
-      throw new Error('Sunucuya ulaşılamadı. Bağlantınızı kontrol edip tekrar deneyin.');
+    if (String(e.message) === 'AGHATASI' || e.name === 'TypeError'){
+      throw new Error('Veritabanına ulaşılamadı. Bağlantınızı kontrol edip tekrar deneyin.');
     }
     throw e;
   }
 }
+
+const sbSec    = (tablo, sorgu='') =>
+  sb(tablo + '?' + (/(^|&)select=/.test(sorgu) ? sorgu : 'select=*' + (sorgu ? '&' + sorgu : '')));
+const sbEkle   = (tablo, kayit)    => sb(tablo, { method:'POST', body:kayit, prefer:'return=representation' });
+const sbUpsert = (tablo, kayit)    => sb(tablo, { method:'POST', body:kayit,
+                                       prefer:'resolution=merge-duplicates,return=representation' });
+const sbGuncel = (tablo, sorgu, d) => sb(tablo + '?' + sorgu, { method:'PATCH', body:d, prefer:'return=representation' });
+const sbSil    = (tablo, sorgu)    => sb(tablo + '?' + sorgu, { method:'DELETE' });
+
+/** PostgREST filtre değeri kaçışı */
+const q = v => encodeURIComponent(String(v));
 
 function yukle(acik, metin='Yükleniyor...'){
   document.getElementById('yuklemeMetin').textContent = metin;
@@ -774,48 +837,573 @@ function ilerleme(no){
 }
 
 /* =================================================================
+   İŞ MANTIĞI
+   Eskiden Apps Script'te çalışan işlemler burada yürüyor.
+   Ekran kodları bunları yine api('islem', {...}) diye çağırıyor.
+   ================================================================= */
+
+const OP_GUN_ALAN = ['pzt','sal','car','per','cum'];
+const bugunISO = () => {
+  const d = new Date();
+  return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
+};
+
+/** PLN-007, GRV-012 gibi sıradaki kimliği üretir */
+async function siradakiId(tablo, sutun, onek){
+  const satirlar = await sb(tablo + '?select=' + sutun + '&' + sutun + '=like.' + onek + '-*');
+  let enBuyuk = 0;
+  (satirlar || []).forEach(s => {
+    const m = String(s[sutun] || '').match(new RegExp('^' + onek + '-(\\d+)$'));
+    if (m) enBuyuk = Math.max(enBuyuk, parseInt(m[1], 10));
+  });
+  return onek + '-' + ('000' + (enBuyuk + 1)).slice(-3);
+}
+
+const ISLEMLER = {
+
+  /* ---------- Bağlantı denemesi ---------- */
+  async ping(){
+    await sb('ayarlar?select=anahtar&limit=1');
+    return { mesaj: 'Bağlantı başarılı' };
+  },
+
+  /* ---------- Açılış verisi ---------- */
+  async getAll(){
+    const [makineler, gorevler, plan, isEmirleri, parcalar, kullanim,
+           ayarlar, opGorevler, opOnaylar] = await Promise.all([
+      sbSec('makineler',          'order=makine_kodu'),
+      sbSec('bakim_gorevleri',    'order=makine_kodu,sira'),
+      sbSec('bakim_plani',        'order=planlanan_tarih'),
+      sbSec('is_emirleri',        'order=is_emri_no.desc'),
+      sbSec('yedek_parca',        'order=parca_kodu'),
+      sbSec('parca_kullanim',     'order=kayit_id'),
+      sbSec('ayarlar',            'order=anahtar'),
+      sbSec('operator_gorevleri', 'order=makine_kodu,periyot,sira'),
+      sbSec('operator_onay',      'order=onay_id')
+    ]);
+
+    // Checklist detayları yalnızca açık iş emirleri için taşınır
+    const acik = (isEmirleri || []).filter(i => i.durum !== 'Kapalı').map(i => i.is_emri_no);
+    let detaylar = [];
+    if (acik.length){
+      detaylar = await sbSec('is_emri_detay',
+        'is_emri_no=in.(' + acik.map(x => '"' + x + '"').join(',') + ')&order=sira');
+    }
+
+    return {
+      makineler : dbdenListe('makineler', makineler),
+      gorevler  : dbdenListe('bakim_gorevleri', gorevler),
+      plan      : dbdenListe('bakim_plani', plan),
+      isEmirleri: dbdenListe('is_emirleri', isEmirleri),
+      detaylar  : dbdenListe('is_emri_detay', detaylar),
+      parcalar  : dbdenListe('yedek_parca', parcalar),
+      kullanim  : dbdenListe('parca_kullanim', kullanim),
+      ayarlar   : dbdenListe('ayarlar', ayarlar),
+      opGorevler: dbdenListe('operator_gorevleri', opGorevler),
+      opOnaylar : dbdenListe('operator_onay', opOnaylar),
+      bugun     : bugunISO()
+    };
+  },
+
+  /* ---------- Makine ---------- */
+  async makineKaydet(p){
+    const k = dbye('makineler', p.makine);
+    if (!k.makine_kodu) throw new Error('Makine kodu zorunlu.');
+    await sbUpsert('makineler', k);
+    return { kod: k.makine_kodu };
+  },
+  async makineSil(p){
+    await sbSil('makineler', 'makine_kodu=eq.' + q(p.kod));
+    return { silindi: true };
+  },
+
+  /* ---------- Bakım görevi ---------- */
+  async gorevKaydet(p){
+    const g = dbye('bakim_gorevleri', p.gorev);
+    if (!g.makine_kodu || !g.faaliyet) throw new Error('Makine kodu ve faaliyet zorunlu.');
+    if (!g.gorev_id){
+      g.gorev_id = await siradakiId('bakim_gorevleri', 'gorev_id', 'GRV');
+      if (!g.aktif) g.aktif = 'Evet';
+      await sbEkle('bakim_gorevleri', g);
+      return { gorevId: g.gorev_id, yeni: true };
+    }
+    await sbUpsert('bakim_gorevleri', g);
+    return { gorevId: g.gorev_id, yeni: false };
+  },
+  async gorevSil(p){
+    await sbSil('bakim_gorevleri', 'gorev_id=eq.' + q(p.gorevId));
+    return { silindi: true };
+  },
+
+  /* ---------- Bakım planı ---------- */
+  async planKaydet(p){
+    const pl = dbye('bakim_plani', p.plan);
+    if (!pl.plan_id){
+      pl.plan_id = await siradakiId('bakim_plani', 'plan_id', 'PLN');
+      if (!pl.durum) pl.durum = 'P';
+      await sbEkle('bakim_plani', pl);
+      return { planId: pl.plan_id, yeni: true };
+    }
+    await sbUpsert('bakim_plani', pl);
+    return { planId: pl.plan_id, yeni: false };
+  },
+  async planSil(p){
+    await sbSil('bakim_plani', 'plan_id=eq.' + q(p.planId));
+    return { silindi: true };
+  },
+  async planUret(p){
+    const yil = parseInt(p.yil, 10);
+    const periyot = p.periyot || '6 Aylık';
+    const aylar = typeof p.aylar === 'string' ? JSON.parse(p.aylar) : p.aylar;
+    const gun = p.gun || 15;
+
+    const [makineler, mevcut] = await Promise.all([
+      sbSec('makineler', 'order=makine_kodu'),
+      sbSec('bakim_plani', 'select=plan_id,makine_kodu,periyot,planlanan_tarih')
+    ]);
+
+    const varOlan = {};
+    let enBuyuk = 0;
+    (mevcut || []).forEach(r => {
+      varOlan[r.makine_kodu + '|' + r.periyot + '|' + r.planlanan_tarih] = true;
+      const m = String(r.plan_id || '').match(/^PLN-(\d+)$/);
+      if (m) enBuyuk = Math.max(enBuyuk, parseInt(m[1], 10));
+    });
+
+    const yeni = [];
+    (makineler || []).forEach(mk => {
+      if (String(mk.durum || '').toLowerCase() === 'pasif') return;
+      aylar.forEach(ay => {
+        const tarih = yil + '-' + ('0'+ay).slice(-2) + '-' + ('0'+gun).slice(-2);
+        const anahtar = mk.makine_kodu + '|' + periyot + '|' + tarih;
+        if (varOlan[anahtar]) return;
+        varOlan[anahtar] = true;
+        enBuyuk++;
+        yeni.push({
+          plan_id: 'PLN-' + ('000'+enBuyuk).slice(-3),
+          makine_kodu: mk.makine_kodu, periyot, yil,
+          planlanan_tarih: tarih, durum: 'P', is_emri_no: '',
+          gerceklesen_tarih: null, erteleme_gerekcesi: ''
+        });
+      });
+    });
+
+    if (yeni.length) await sbEkle('bakim_plani', yeni);
+    return { eklenen: yeni.length };
+  },
+
+  /* ---------- İş emri ---------- */
+  async isEmriAc(p){
+    const kod = p.makineKodu;
+    if (!kod) throw new Error('Makine seçilmedi.');
+    const tur = p.tur || 'Planlı';
+    const periyot = p.periyot || (tur === 'Planlı' ? '6 Aylık' : '');
+
+    const no = await sb('rpc/yeni_is_emri_no', { method:'POST', body:{} });
+
+    await sbEkle('is_emirleri', {
+      is_emri_no: no, kayit_tarihi: bugunISO(), isin_turu: tur, periyot,
+      makine_kodu: kod, plan_id: p.planId || '',
+      planlanan_baslangic: p.planBas || null, planlanan_bitis: p.planBit || null,
+      fiili_baslangic: '', fiili_bitis: '', sure_dk: null, durus_dk: null,
+      hazirlayan: p.hazirlayan || '', yapan: '',
+      ariza_tanimi: p.arizaTanimi || '', aciklama: '',
+      makine_calisir: '', durum: 'Açık',
+      bakim_onayi: '', uretim_onayi: '', kapanis_tarihi: null
+    });
+
+    let adet = 0;
+    if (tur === 'Planlı'){
+      const gorevler = await sbSec('bakim_gorevleri',
+        'makine_kodu=eq.' + q(kod) + '&order=sira');
+      const uygun = (gorevler || []).filter(g => {
+        if (String(g.aktif || 'Evet').toLowerCase() === 'hayır') return false;
+        const gp = String(g.periyot || '').trim();
+        return !gp || gp === 'Tümü' || gp === periyot;
+      });
+      if (uygun.length){
+        await sbEkle('is_emri_detay', uygun.map(g => ({
+          is_emri_no: no, sira: g.sira, faaliyet: g.faaliyet,
+          tip: g.tip || '', sonuc: '', not_metni: ''
+        })));
+        adet = uygun.length;
+      }
+    }
+
+    if (p.planId){
+      await sbGuncel('bakim_plani', 'plan_id=eq.' + q(p.planId), { is_emri_no: no });
+    }
+    return { isEmriNo: no, maddeAdedi: adet };
+  },
+
+  async isEmriKaydet(p){
+    const no = p.isEmriNo;
+    if (!no) throw new Error('İş emri no yok.');
+    if (p.baslik) await sbGuncel('is_emirleri', 'is_emri_no=eq.' + q(no), dbye('is_emirleri', p.baslik));
+
+    if (p.detaylar && p.detaylar.length){
+      const mevcut = await sbSec('is_emri_detay', 'is_emri_no=eq.' + q(no));
+      const haritaSira = {};
+      (mevcut || []).forEach(d => { haritaSira[String(d.sira)] = d.id; });
+
+      await Promise.all(p.detaylar.map(d => {
+        const id = haritaSira[String(d.sira)];
+        if (!id) return Promise.resolve();
+        return sbGuncel('is_emri_detay', 'id=eq.' + id,
+                        { sonuc: d.sonuc || '', not_metni: d.not || '' });
+      }));
+    }
+    return { isEmriNo: no };
+  },
+
+  async isEmriKapat(p){
+    const no = p.isEmriNo;
+    if (!no) throw new Error('İş emri no yok.');
+    const b = Object.assign({}, p.baslik || {});
+    b['Durum'] = 'Kapalı';
+    b['Kapanış Tarihi'] = bugunISO();
+
+    const fb = b['Fiili Başlangıç'], fs = b['Fiili Bitiş'];
+    if (fb && fs){
+      const d1 = new Date(String(fb).replace(' ','T'));
+      const d2 = new Date(String(fs).replace(' ','T'));
+      if (!isNaN(d1) && !isNaN(d2) && d2 > d1) b['Süre (dk)'] = Math.round((d2 - d1) / 60000);
+    }
+
+    if (p.detaylar) await ISLEMLER.isEmriKaydet({ isEmriNo: no, detaylar: p.detaylar });
+    await sbGuncel('is_emirleri', 'is_emri_no=eq.' + q(no), dbye('is_emirleri', b));
+
+    const plan = await sbSec('bakim_plani', 'is_emri_no=eq.' + q(no));
+    if (plan && plan.length){
+      await sbGuncel('bakim_plani', 'plan_id=eq.' + q(plan[0].plan_id), {
+        durum: 'Y',
+        gerceklesen_tarih: b['Fiili Bitiş'] ? String(b['Fiili Bitiş']).substring(0,10) : bugunISO()
+      });
+    }
+    return { isEmriNo: no, durum: 'Kapalı' };
+  },
+
+  async isEmriSil(p){
+    const no = p.isEmriNo;
+    // Kullanılan parçaları stoğa iade et
+    const kullanimlar = await sbSec('parca_kullanim', 'is_emri_no=eq.' + q(no));
+    for (const k of (kullanimlar || [])){
+      const pr = await sbSec('yedek_parca', 'parca_kodu=eq.' + q(k.parca_kodu));
+      if (pr && pr.length){
+        await sbGuncel('yedek_parca', 'parca_kodu=eq.' + q(k.parca_kodu),
+          { stok: (parseFloat(pr[0].stok)||0) + (parseFloat(k.miktar)||0) });
+      }
+    }
+    // is_emri_detay ve parca_kullanim veritabanı tarafında birlikte silinir
+    await sbSil('is_emirleri', 'is_emri_no=eq.' + q(no));
+    await sbGuncel('bakim_plani', 'is_emri_no=eq.' + q(no),
+                   { is_emri_no: '', durum: 'P', gerceklesen_tarih: null });
+    return { silindi: true };
+  },
+
+  async isEmriDetay(p){
+    const d = await sbSec('is_emri_detay', 'is_emri_no=eq.' + q(p.isEmriNo) + '&order=sira');
+    return dbdenListe('is_emri_detay', d);
+  },
+
+  async isEmriRapor(p){
+    const yil = String(p.yil);
+    const isEmirleri = await sbSec('is_emirleri',
+      'select=is_emri_no,makine_kodu&kayit_tarihi=gte.' + yil + '-01-01&kayit_tarihi=lte.' + yil + '-12-31');
+    if (!isEmirleri || !isEmirleri.length)
+      return { yil, isaretli:0, uygunsuzluklar:[], makineUygunsuz:{} };
+
+    const makinesi = {};
+    isEmirleri.forEach(i => { makinesi[i.is_emri_no] = i.makine_kodu; });
+    const nolar = isEmirleri.map(i => '"' + i.is_emri_no + '"').join(',');
+
+    const detaylar = await sbSec('is_emri_detay',
+      'is_emri_no=in.(' + nolar + ')');
+
+    let isaretli = 0;
+    const uygunsuzluklar = [], makineUygunsuz = {};
+    (detaylar || []).forEach(d => {
+      if (!d.sonuc) return;
+      isaretli++;
+      if (d.sonuc !== 'Uygun Değil') return;
+      const kod = makinesi[d.is_emri_no] || '';
+      makineUygunsuz[kod] = (makineUygunsuz[kod] || 0) + 1;
+      uygunsuzluklar.push({ isEmriNo:d.is_emri_no, makine:kod,
+                            faaliyet:d.faaliyet, not:d.not_metni || '' });
+    });
+    return { yil, isaretli, uygunsuzluklar, makineUygunsuz };
+  },
+
+  /* ---------- Yedek parça ---------- */
+  async parcaKaydet(p){
+    const pa = dbye('yedek_parca', p.parca);
+    if (!pa.parca_kodu) throw new Error('Parça kodu zorunlu.');
+    await sbUpsert('yedek_parca', pa);
+    return { parcaKodu: pa.parca_kodu };
+  },
+  async parcaSil(p){
+    await sbSil('yedek_parca', 'parca_kodu=eq.' + q(p.parcaKodu));
+    return { silindi: true };
+  },
+
+  async parcaKullan(p){
+    const k = p.kullanim;
+    const miktar = parseFloat(String(k['Miktar']).replace(',','.')) || 0;
+    if (!k['Parça Kodu'] || miktar <= 0) throw new Error('Parça ve miktar zorunlu.');
+
+    const kayitId = await siradakiId('parca_kullanim', 'kayit_id', 'KUL');
+    const pr = await sbSec('yedek_parca', 'parca_kodu=eq.' + q(k['Parça Kodu']));
+    const parca = (pr && pr[0]) || {};
+
+    await sbEkle('parca_kullanim', {
+      kayit_id: kayitId, is_emri_no: k['İş Emri No'], tarih: k['Tarih'] || bugunISO(),
+      parca_kodu: k['Parça Kodu'], parca_adi: k['Parça Adı'] || parca.parca_adi || '',
+      tedarikci: k['Tedarikçi'] || parca.tedarikci || '',
+      makine_kodu: k['Makine Kodu'] || '', miktar,
+      birim: k['Birim'] || parca.birim || 'AD'
+    });
+
+    if (parca.parca_kodu){
+      await sbGuncel('yedek_parca', 'parca_kodu=eq.' + q(parca.parca_kodu),
+        { stok: Math.round(((parseFloat(parca.stok)||0) - miktar) * 100) / 100 });
+    }
+    return { kayitId };
+  },
+
+  async parcaKullanimSil(p){
+    const kr = await sbSec('parca_kullanim', 'kayit_id=eq.' + q(p.kayitId));
+    if (!kr || !kr.length) return { silindi: false };
+    const k = kr[0];
+    const pr = await sbSec('yedek_parca', 'parca_kodu=eq.' + q(k.parca_kodu));
+    if (pr && pr.length){
+      await sbGuncel('yedek_parca', 'parca_kodu=eq.' + q(k.parca_kodu),
+        { stok: Math.round(((parseFloat(pr[0].stok)||0) + (parseFloat(k.miktar)||0)) * 100) / 100 });
+    }
+    await sbSil('parca_kullanim', 'kayit_id=eq.' + q(p.kayitId));
+    return { silindi: true };
+  },
+
+  /* ---------- Operatör kontrol ---------- */
+  async opHaftaGetir(p){
+    const kod = p.makineKodu, yil = parseInt(p.yil,10), hafta = parseInt(p.hafta,10);
+    if (!kod) throw new Error('Makine seçilmedi.');
+    const filtre = 'makine_kodu=eq.' + q(kod) + '&yil=eq.' + yil + '&hafta=eq.' + hafta;
+
+    let mevcut = await sbSec('operator_kontrol', filtre + '&order=periyot,sira');
+
+    if (!mevcut || !mevcut.length){
+      const gorevler = await sbSec('operator_gorevleri',
+        'makine_kodu=eq.' + q(kod) + '&order=periyot,sira');
+      const uygun = (gorevler || []).filter(g =>
+        String(g.aktif || 'Evet').toLowerCase() !== 'hayır');
+
+      if (uygun.length){
+        uygun.sort((a,b) => {
+          if (a.periyot !== b.periyot) return a.periyot === 'Günlük' ? -1 : 1;
+          return (a.sira||0) - (b.sira||0);
+        });
+        await sbEkle('operator_kontrol', uygun.map(g => ({
+          kayit_id: 'OPK-' + yil + '-' + ('0'+hafta).slice(-2) + '-' + kod + '-' + g.gorev_id,
+          makine_kodu: kod, yil, hafta, gorev_id: g.gorev_id,
+          periyot: g.periyot, sira: g.sira, faaliyet: g.faaliyet,
+          pzt:'', sal:'', car:'', per:'', cum:'', not_metni:''
+        })));
+        mevcut = await sbSec('operator_kontrol', filtre + '&order=periyot,sira');
+      }
+    }
+
+    const onay = await sbSec('operator_onay', filtre);
+    return {
+      satirlar: dbdenListe('operator_kontrol', mevcut),
+      onay: (onay && onay.length) ? dbden('operator_onay', onay[0]) : null
+    };
+  },
+
+  async opKaydet(p){
+    const satirlar = typeof p.satirlar === 'string' ? JSON.parse(p.satirlar) : p.satirlar;
+    if (!satirlar || !satirlar.length) return { kaydedilen: 0 };
+    await Promise.all(satirlar.map(x =>
+      sbGuncel('operator_kontrol', 'kayit_id=eq.' + q(x.kayitId), {
+        pzt:x.pzt||'', sal:x.sal||'', car:x.car||'',
+        per:x.per||'', cum:x.cum||'', not_metni:x.not||''
+      })));
+    return { kaydedilen: satirlar.length };
+  },
+
+  async opOnayla(p){
+    const yil = parseInt(p.yil,10), hafta = parseInt(p.hafta,10);
+    const onayId = 'OPO-' + yil + '-' + ('0'+hafta).slice(-2) + '-' + p.makineKodu;
+    await sbUpsert('operator_onay', {
+      onay_id: onayId, makine_kodu: p.makineKodu, yil, hafta,
+      onay_tarihi: p.onayTarihi || bugunISO(),
+      aciklama: p.aciklama || '', onaylayan: p.onaylayan || ''
+    });
+    return { onayId };
+  },
+
+  async opOnayKaldir(p){
+    const onayId = 'OPO-' + parseInt(p.yil,10) + '-' +
+                   ('0'+parseInt(p.hafta,10)).slice(-2) + '-' + p.makineKodu;
+    await sbSil('operator_onay', 'onay_id=eq.' + q(onayId));
+    return { silindi: true };
+  },
+
+  async opGorevKaydet(p){
+    const g = dbye('operator_gorevleri', p.gorev);
+    if (!g.makine_kodu || !g.faaliyet) throw new Error('Makine ve faaliyet zorunlu.');
+    if (!g.gorev_id){
+      g.gorev_id = await siradakiId('operator_gorevleri', 'gorev_id', 'OPG');
+      if (!g.aktif) g.aktif = 'Evet';
+      await sbEkle('operator_gorevleri', g);
+      return { gorevId: g.gorev_id, yeni: true };
+    }
+    await sbUpsert('operator_gorevleri', g);
+    return { gorevId: g.gorev_id, yeni: false };
+  },
+  async opGorevSil(p){
+    await sbSil('operator_gorevleri', 'gorev_id=eq.' + q(p.gorevId));
+    return { silindi: true };
+  },
+
+  /* ---------- Özetler ---------- */
+  async opOzet(p){
+    const yil = parseInt(p.yil,10), hafta = parseInt(p.hafta,10);
+    const [gorevler, kontrol, onaylar] = await Promise.all([
+      sbSec('operator_gorevleri', 'aktif=neq.' + q('Hayır')),
+      sbSec('operator_kontrol', 'yil=eq.' + yil + '&hafta=eq.' + hafta),
+      sbSec('operator_onay',    'yil=eq.' + yil + '&hafta=eq.' + hafta)
+    ]);
+    if (!gorevler || !gorevler.length) return { yil, hafta, makineler: [] };
+
+    const makineler = {}, sira = [];
+    gorevler.forEach(g => {
+      if (!makineler[g.makine_kodu]){
+        makineler[g.makine_kodu] = { kod:g.makine_kodu, toplam:0, dolu:0,
+                                     uygunsuz:0, acildi:false, onayli:false };
+        sira.push(g.makine_kodu);
+      }
+      makineler[g.makine_kodu].toplam += (g.periyot === 'Haftalık' ? 1 : 5);
+    });
+
+    (kontrol || []).forEach(r => {
+      const m = makineler[r.makine_kodu];
+      if (!m) return;
+      m.acildi = true;
+      const haftalik = r.periyot === 'Haftalık';
+      OP_GUN_ALAN.forEach((alan, i) => {
+        if (haftalik && i < 4) return;
+        if (r[alan]){ m.dolu++; if (r[alan] === '✗') m.uygunsuz++; }
+      });
+    });
+
+    (onaylar || []).forEach(o => { if (makineler[o.makine_kodu]) makineler[o.makine_kodu].onayli = true; });
+    return { yil, hafta, makineler: sira.map(k => makineler[k]) };
+  },
+
+  async opRapor(p){
+    const yil = parseInt(p.yil,10);
+    const [kontrol, onaylar] = await Promise.all([
+      sbSec('operator_kontrol', 'yil=eq.' + yil),
+      sbSec('operator_onay',    'yil=eq.' + yil)
+    ]);
+
+    let toplam = 0, dolu = 0;
+    const uygunsuzluklar = [], haftalar = {};
+    (kontrol || []).forEach(r => {
+      const h = String(r.hafta);
+      if (!haftalar[h]) haftalar[h] = { hafta:h, dolu:0, toplam:0, uygunsuz:0, _mak:{} };
+      haftalar[h]._mak[r.makine_kodu] = true;
+      const haftalik = r.periyot === 'Haftalık';
+      OP_GUN_ALAN.forEach((alan, i) => {
+        if (haftalik && i < 4) return;
+        toplam++; haftalar[h].toplam++;
+        if (r[alan]){ dolu++; haftalar[h].dolu++; }
+        if (r[alan] === '✗'){
+          haftalar[h].uygunsuz++;
+          uygunsuzluklar.push({ hafta:h, makine:r.makine_kodu,
+            gun:['Pzt','Sal','Çar','Per','Cum'][i], periyot:r.periyot,
+            faaliyet:r.faaliyet, not:r.not_metni || '' });
+        }
+      });
+    });
+
+    const onayli = {};
+    (onaylar || []).forEach(o => { onayli[String(o.hafta)] = true; });
+
+    const haftaListe = Object.keys(haftalar).map(k => {
+      const x = haftalar[k];
+      x.makineSayisi = Object.keys(x._mak).length;
+      delete x._mak;
+      x.onayli = !!onayli[x.hafta];
+      return x;
+    }).sort((a,b) => parseInt(b.hafta,10) - parseInt(a.hafta,10));
+
+    uygunsuzluklar.sort((a,b) => parseInt(b.hafta,10) - parseInt(a.hafta,10));
+    return { yil:String(yil), toplam, dolu, onaySayisi:(onaylar||[]).length,
+             haftalar:haftaListe, uygunsuzluklar };
+  }
+};
+
+/** Ekran kodlarının çağırdığı tek giriş noktası */
+async function api(action, payload = {}){
+  const f = ISLEMLER[action];
+  if (!f) throw new Error('Bilinmeyen işlem: ' + action);
+  return await f(payload);
+}
+
+/* =================================================================
    BAĞLANTI AYARI EKRANI
    ================================================================= */
 function baglantiAyari(ilkKurulum){
-  const mevcut = API_URL || '';
-  modalAc(ilkKurulum ? 'Bağlantı Ayarı' : 'Bağlantı Adresini Değiştir', `
+  modalAc(ilkKurulum ? 'Veritabanı Bağlantısı' : 'Bağlantı Ayarlarını Değiştir', `
     ${ilkKurulum ? `<p style="margin-bottom:15px;font-size:13.5px;line-height:1.6">
-      Uygulamanın verilere ulaşabilmesi için Google Apps Script bağlantı adresi gerekiyor.
-      Adresi bir kez girdiğinizde bu tarayıcıda saklanır; uygulama güncellense de tekrar sorulmaz.</p>` : ''}
+      Uygulamanın verilere ulaşabilmesi için veritabanı bilgileri gerekiyor.
+      Bir kez girdiğinizde bu tarayıcıda saklanır; uygulama güncellense de tekrar sorulmaz.</p>` : ''}
     <div class="alan genis">
-      <label>Apps Script Web Uygulaması Adresi</label>
-      <input id="apiGiris" value="${kacis(mevcut)}"
-             placeholder="https://script.google.com/macros/s/.../exec"
+      <label>Proje Adresi (Project URL)</label>
+      <input id="sbUrlGiris" value="${kacis(SB_URL)}"
+             placeholder="https://xxxxxxxx.supabase.co"
              style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px">
     </div>
+    <div class="alan genis" style="margin-top:13px">
+      <label>Genel Anahtar (anon public)</label>
+      <textarea id="sbKeyGiris" placeholder="eyJhbGciOi..."
+        style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;min-height:80px">${kacis(SB_KEY)}</textarea>
+    </div>
     <details style="margin-top:14px;font-size:13px;color:var(--metin-2)">
-      <summary style="cursor:pointer;font-weight:600;color:var(--lacivert)">Adresi nereden bulurum?</summary>
+      <summary style="cursor:pointer;font-weight:600;color:var(--lacivert)">Bu bilgileri nereden bulurum?</summary>
       <ol style="margin:10px 0 0 18px;line-height:1.8">
-        <li>Google Sheets dosyanızı açın</li>
-        <li>Uzantılar &rarr; Apps Script</li>
-        <li>Sağ üstten <strong>Dağıt &rarr; Dağıtımları yönet</strong></li>
-        <li>Web uygulaması adresini kopyalayın (sonu <code>/exec</code> ile biter)</li>
+        <li>Supabase panelini açın</li>
+        <li>Sol menüde en alttaki dişli &rarr; <strong>Project Settings</strong></li>
+        <li><strong>API</strong> sekmesi</li>
+        <li><strong>Project URL</strong> ve <strong>anon public</strong> anahtarını kopyalayın</li>
       </ol>
+      <p style="margin-top:10px">
+        <strong>service_role</strong> anahtarını buraya yazmayın — o gizli kalmalıdır.</p>
     </details>`,
     [...(ilkKurulum ? [] : [{ metin:'İptal', sinif:'ikincil', tikla: modalKapat }]),
      { metin:'Kaydet ve Bağlan', sinif:'', tikla: async () => {
-        const v = document.getElementById('apiGiris').value.trim();
-        if (!v) return bildir('Adres boş olamaz', 'hata');
-        if (!/^https:\/\/script\.google\.com\/.*\/exec$/.test(v))
-          return bildir('Adres https://script.google.com/... ile başlayıp /exec ile bitmeli', 'hata');
+        const u = document.getElementById('sbUrlGiris').value.trim().replace(/\/+$/,'');
+        const k = document.getElementById('sbKeyGiris').value.trim();
+        if (!u || !k) return bildir('Adres ve anahtar zorunlu', 'hata');
+        if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(u))
+          return bildir('Adres https://xxxx.supabase.co biçiminde olmalı', 'hata');
+        if (k.indexOf('service_role') >= 0)
+          return bildir('service_role anahtarı kullanılamaz, anon public anahtarını girin', 'hata');
 
-        const eski = API_URL;
-        API_URL = v;
+        const eskiU = SB_URL, eskiK = SB_KEY;
+        SB_URL = u; SB_KEY = k;
         yukle(true, 'Bağlantı deneniyor...');
         try {
           await api('ping');
-          localStorage.setItem('bym_api', v);
+          localStorage.setItem('bym_sb_url', u);
+          localStorage.setItem('bym_sb_key', k);
           modalKapat();
           yukle(false);
           await veriYukle();
           bildir('Bağlantı kuruldu', 'basari');
         } catch(e){
-          API_URL = eski;
+          SB_URL = eskiU; SB_KEY = eskiK;
           yukle(false);
           bildir('Bağlanılamadı: ' + e.message, 'hata');
         }
@@ -826,7 +1414,7 @@ function baglantiAyari(ilkKurulum){
    VERİ YÜKLEME
    ================================================================= */
 async function veriYukle(bildirGoster = false){
-  if (!API_URL) { baglantiAyari(true); return; }
+  if (!SB_URL || !SB_KEY) { baglantiAyari(true); return; }
   yukle(true, 'Veriler yükleniyor...');
   try {
     // Ana veri ile panel özeti aynı anda istenir — biri diğerini beklemez.
