@@ -279,6 +279,8 @@
     .secenekler{width:100%}
     .secenekler label{flex:1; text-align:center}
     .modal-govde{max-height:calc(100vh - 190px)}
+    /* Dar ekranda ikincil sütunlar gizlenir; satıra dokununca kart açılır */
+    .dar-gizle{display:none}
   }
 </style>
 </head>
@@ -299,6 +301,7 @@
   <button data-sayfa="plan">Bakım Planı</button>
   <button data-sayfa="makine">Makineler</button>
   <button data-sayfa="parca">Yedek Parça</button>
+  <button data-sayfa="cihaz">Ölçüm Cihazları</button>
   <button data-sayfa="rapor">Raporlar</button>
 </nav>
 
@@ -513,6 +516,36 @@
     </div>
   </section>
 
+  <!-- ============ ÖLÇÜM CİHAZLARI ============ -->
+  <section class="sayfa" id="s-cihaz">
+    <div class="filtre">
+      <input type="search" id="fCihazAra" placeholder="Cihaz kodu, adı veya seri no ara..." oninput="cihazListele()">
+      <select id="fCihazTip" onchange="cihazListele()"><option value="">Tüm tipler</option></select>
+      <select id="fCihazDurum" onchange="cihazListele()">
+        <option value="">Tüm cihazlar</option>
+        <option value="dikkat">Dikkat gerekenler</option>
+        <option value="Kullanımda">Kullanımda</option>
+        <option value="Kullanım Dışı">Kullanım dışı</option>
+      </select>
+      <div style="flex:1"></div>
+      <button class="btn ikincil" onclick="kalibrasyonPlaniYazdir()">Kalibrasyon Planı</button>
+      <button class="btn" onclick="cihazDuzenle()">+ Yeni Cihaz</button>
+    </div>
+    <div class="kart">
+      <div class="kart-govde sifir tablo-sar">
+        <table>
+          <thead><tr>
+            <th>Kod</th><th>Cihaz</th><th class="dar-gizle">Tip</th>
+            <th class="dar-gizle">Ölçüm Aralığı</th><th class="dar-gizle">Kullanım Yeri</th>
+            <th class="dar-gizle">Son Kalibrasyon</th><th>Geçerlilik</th><th>Durum</th>
+            <th class="dar-gizle"></th>
+          </tr></thead>
+          <tbody id="cihazTablo"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
   <!-- ============ RAPORLAR ============ -->
   <section class="sayfa" id="s-rapor">
     <div class="filtre">
@@ -571,6 +604,22 @@
         </table>
       </div>
     </div>
+
+    <div class="kart" id="kartKalibrasyon">
+      <div class="kart-bas"><h2>Ölçüm Cihazları — Kalibrasyon Durumu</h2>
+        <div class="bosluk"></div>
+        <button class="btn kucuk ikincil" onclick="kalibrasyonPlaniYazdir()">Yazdır</button>
+      </div>
+      <div class="kart-govde sifir tablo-sar">
+        <table>
+          <thead><tr>
+            <th>Kod</th><th>Cihaz</th><th>Tip</th><th>Son Kalibrasyon</th>
+            <th>Geçerlilik</th><th>Kaynak</th><th>Sonuç</th><th>Durum</th>
+          </tr></thead>
+          <tbody id="raporKalibrasyon"></tbody>
+        </table>
+      </div>
+    </div>
   </section>
 
 </main>
@@ -599,7 +648,7 @@
    anon anahtarı tarayıcıda görünmek üzere tasarlanmıştır,
    gizli değildir. service_role anahtarı ASLA buraya yazılmaz.
    ================================================================= */
-const SURUM = 'v2026.10.01';
+const SURUM = 'v2026.10.15';
 
 const GOMULU_URL = 'https://nynzlfdzolylocxzcuav.supabase.co';  // Technic 5 projesi
 const GOMULU_KEY = '';   // anon public anahtarı — uygulamada "Bağlantı" ekranından girilir
@@ -684,6 +733,20 @@ const ALANLAR = {
   operator_onay: {
     onay_id:'Onay ID', makine_kodu:'Makine Kodu', yil:'Yıl', hafta:'Hafta',
     onay_tarihi:'Onay Tarihi', aciklama:'Açıklama', onaylayan:'Onaylayan'
+  },
+  olcum_cihazlari: {
+    cihaz_kodu:'Cihaz Kodu', cihaz_adi:'Cihaz Adı', tip:'Tip',
+    marka_model:'Marka / Model', seri_no:'Seri No', olcum_araligi:'Ölçüm Aralığı',
+    cozunurluk:'Çözünürlük', tolerans:'Tolerans', kullanim_yeri:'Kullanım Yeri',
+    sorumlu:'Sorumlu', periyot_ay:'Periyot (Ay)', durum:'Durum', notlar:'Notlar'
+  },
+  kalibrasyon_kayitlari: {
+    kayit_id:'Kayıt ID', cihaz_kodu:'Cihaz Kodu',
+    kalibrasyon_tarihi:'Kalibrasyon Tarihi', gecerlilik_tarihi:'Geçerlilik Tarihi',
+    kaynak:'Kaynak', yapan:'Yapan', akreditasyon_no:'Akreditasyon No',
+    referans_cihaz:'Referans Cihaz', sertifika_no:'Sertifika No', sonuc:'Sonuç',
+    sapma:'Sapma', geriye_donuk:'Geriye Dönük Değerlendirme',
+    sertifika_dosya:'Sertifika Dosyası', notlar:'Notlar'
   }
 };
 
@@ -705,7 +768,7 @@ function dbye(tablo, obj){
     if (v === '') {
       // Tarih ve sayı sütunlarında boş metin geçersizdir
       if (/(_tarih|_tarihi|baslangic|bitis)$/.test(db)) v = null;
-      else if (/^(yil|hafta|sira|sure_dk|durus_dk)$/.test(db)) v = null;
+      else if (/^(yil|hafta|sira|sure_dk|durus_dk|periyot_ay)$/.test(db)) v = null;
       else if (/^(stok|min_stok|makinedeki_adet|miktar)$/.test(db)) v = 0;
     }
     o[db] = v;
@@ -766,6 +829,75 @@ const sbSil    = (tablo, sorgu)    => sb(tablo + '?' + sorgu, { method:'DELETE' 
 
 /** PostgREST filtre değeri kaçışı */
 const q = v => encodeURIComponent(String(v));
+
+
+/* -----------------------------------------------------------------
+   SERTİFİKA DOSYALARI — Supabase Storage
+   Kova özeldir: dosyaya doğrudan adresle ulaşılamaz, her açışta
+   bir saatlik imzalı bağlantı üretilir.
+   ----------------------------------------------------------------- */
+const KOVA = 'sertifikalar';
+const depoYol = y => String(y).split('/').map(encodeURIComponent).join('/');
+
+async function depoCagir(yol, secenek){
+  if (!SB_URL || !SB_KEY) throw new Error('Veritabanı bağlantısı ayarlanmamış.');
+  const yanit = await fetch(SB_URL + '/storage/v1/' + yol, secenek);
+  if (!yanit.ok){
+    let mesaj = 'Dosya işlemi başarısız (' + yanit.status + ')';
+    try { const j = JSON.parse(await yanit.text()); mesaj = j.message || j.error || mesaj; } catch(x){}
+    if (yanit.status === 404) mesaj = 'Sertifika dosyası bulunamadı.';
+    if (yanit.status === 413) mesaj = 'Dosya çok büyük (en fazla 10 MB).';
+    throw new Error(mesaj);
+  }
+  return yanit;
+}
+
+/** Dosyayı yükler, kaydedilecek yolu döndürür */
+async function sertifikaYukle(cihazKodu, kayitId, dosya){
+  const izin = ['application/pdf','image/png','image/jpeg'];
+  if (dosya.type && !izin.includes(dosya.type))
+    throw new Error('Yalnızca PDF, PNG veya JPEG yüklenebilir.');
+  if (dosya.size > 10 * 1024 * 1024)
+    throw new Error('Dosya 10 MB sınırını aşıyor.');
+
+  const uzanti = (dosya.name.match(/\.[a-zA-Z0-9]+$/) || ['.pdf'])[0].toLowerCase();
+  const yol = cihazKodu + '/' + kayitId + uzanti;
+
+  await depoCagir('object/' + KOVA + '/' + depoYol(yol), {
+    method : 'POST',
+    headers: { apikey:SB_KEY, Authorization:'Bearer ' + SB_KEY,
+               'Content-Type': dosya.type || 'application/octet-stream',
+               'x-upsert':'true' },
+    body   : dosya
+  });
+  return yol;
+}
+
+/** Süreli görüntüleme bağlantısı üretir */
+async function sertifikaBaglanti(yol, saniye = 3600){
+  const yanit = await depoCagir('object/sign/' + KOVA + '/' + depoYol(yol), {
+    method : 'POST',
+    headers: { apikey:SB_KEY, Authorization:'Bearer ' + SB_KEY,
+               'Content-Type':'application/json' },
+    body   : JSON.stringify({ expiresIn: saniye })
+  });
+  const j = await yanit.json();
+  if (!j.signedURL && !j.signedUrl) throw new Error('Bağlantı üretilemedi.');
+  return SB_URL + '/storage/v1' + (j.signedURL || j.signedUrl);
+}
+
+async function sertifikaSil(yol){
+  if (!yol) return;
+  try {
+    await depoCagir('object/' + KOVA + '/' + depoYol(yol), {
+      method : 'DELETE',
+      headers: { apikey:SB_KEY, Authorization:'Bearer ' + SB_KEY }
+    });
+  } catch(e){
+    // Dosya zaten yoksa kaydın silinmesini engellemeyelim
+    if (!/bulunamadı/i.test(e.message)) throw e;
+  }
+}
 
 function yukle(acik, metin='Yükleniyor...'){
   document.getElementById('yuklemeMetin').textContent = metin;
@@ -870,7 +1002,7 @@ const ISLEMLER = {
   /* ---------- Açılış verisi ---------- */
   async getAll(){
     const [makineler, gorevler, plan, isEmirleri, parcalar, kullanim,
-           ayarlar, opGorevler, opOnaylar] = await Promise.all([
+           ayarlar, opGorevler, opOnaylar, cihazlar, kalibrasyonlar] = await Promise.all([
       sbSec('makineler',          'order=makine_kodu'),
       sbSec('bakim_gorevleri',    'order=makine_kodu,sira'),
       sbSec('bakim_plani',        'order=planlanan_tarih'),
@@ -879,7 +1011,9 @@ const ISLEMLER = {
       sbSec('parca_kullanim',     'order=kayit_id'),
       sbSec('ayarlar',            'order=anahtar'),
       sbSec('operator_gorevleri', 'order=makine_kodu,periyot,sira'),
-      sbSec('operator_onay',      'order=onay_id')
+      sbSec('operator_onay',      'order=onay_id'),
+      sbSec('olcum_cihazlari',       'order=cihaz_kodu'),
+      sbSec('kalibrasyon_kayitlari', 'order=kalibrasyon_tarihi.desc')
     ]);
 
     // Checklist detayları yalnızca açık iş emirleri için taşınır
@@ -901,6 +1035,8 @@ const ISLEMLER = {
       ayarlar   : dbdenListe('ayarlar', ayarlar),
       opGorevler: dbdenListe('operator_gorevleri', opGorevler),
       opOnaylar : dbdenListe('operator_onay', opOnaylar),
+      cihazlar  : dbdenListe('olcum_cihazlari', cihazlar),
+      kalibrasyonlar: dbdenListe('kalibrasyon_kayitlari', kalibrasyonlar),
       bugun     : bugunISO()
     };
   },
@@ -1265,6 +1401,45 @@ const ISLEMLER = {
     return { silindi: true };
   },
 
+  /* ---------- Ölçüm cihazları ve kalibrasyon ---------- */
+  async cihazKaydet(p){
+    const c = dbye('olcum_cihazlari', p.cihaz);
+    if (!c.cihaz_kodu) throw new Error('Cihaz kodu zorunlu.');
+    if (c.periyot_ay === null || c.periyot_ay === undefined) c.periyot_ay = 12;
+    await sbUpsert('olcum_cihazlari', c);
+    return { kod: c.cihaz_kodu };
+  },
+
+  async cihazSil(p){
+    // Önce bu cihaza ait sertifika dosyalarını temizle — kayıtlar cascade ile gider
+    const kayitlar = await sbSec('kalibrasyon_kayitlari',
+      'select=sertifika_dosya&cihaz_kodu=eq.' + q(p.kod));
+    for (const k of (kayitlar || [])){
+      if (k.sertifika_dosya) await sertifikaSil(k.sertifika_dosya);
+    }
+    await sbSil('olcum_cihazlari', 'cihaz_kodu=eq.' + q(p.kod));
+    return { silindi: true };
+  },
+
+  async kalibrasyonKaydet(p){
+    const k = dbye('kalibrasyon_kayitlari', p.kayit);
+    if (!k.cihaz_kodu) throw new Error('Cihaz seçilmedi.');
+    if (!k.kayit_id) k.kayit_id = 'KAL-' + Date.now().toString(36).toUpperCase();
+    // Uygunsuzluk yoksa geriye dönük değerlendirme alanı taşınmaz
+    if (k.sonuc === 'Uygun') k.geriye_donuk = '';
+    await sbUpsert('kalibrasyon_kayitlari', k);
+    return { kayitId: k.kayit_id };
+  },
+
+  async kalibrasyonSil(p){
+    const mevcut = await sbSec('kalibrasyon_kayitlari',
+      'select=sertifika_dosya&kayit_id=eq.' + q(p.kayitId));
+    if (mevcut && mevcut[0] && mevcut[0].sertifika_dosya)
+      await sertifikaSil(mevcut[0].sertifika_dosya);
+    await sbSil('kalibrasyon_kayitlari', 'kayit_id=eq.' + q(p.kayitId));
+    return { silindi: true };
+  },
+
   /* ---------- Özetler ---------- */
   async opOzet(p){
     const yil = parseInt(p.yil,10), hafta = parseInt(p.hafta,10);
@@ -1452,6 +1627,14 @@ async function veriYukle(bildirGoster = false){
       ps.onchange = () => localStorage.setItem('bym_personel', ps.value);
     }
 
+    // Ölçüm cihazı tip süzgeci — yalnızca kayıtlı tipler listelenir
+    const ct = document.getElementById('fCihazTip');
+    const ctEski = ct.value;
+    const tipler = [...new Set((D.cihazlar || []).map(c => c['Tip']).filter(Boolean))].sort();
+    ct.innerHTML = '<option value="">Tüm tipler</option>' +
+      tipler.map(t => `<option>${kacis(t)}</option>`).join('');
+    ct.value = ctEski;
+
     const yillar = new Set([new Date().getFullYear()]);
     D.plan.forEach(p => { if (p['Yıl']) yillar.add(parseInt(p['Yıl'],10)); });
     D.isEmirleri.forEach(i => {
@@ -1485,7 +1668,7 @@ let raporTazeMi = false;
 
 function hepsiniCiz(){
   panelCiz(); isEmriListele(); planListele();
-  makineListele(); parcaListele();
+  makineListele(); parcaListele(); cihazListele();
   raporTazeMi = false;                    // rapor sekmesi açılınca tazelenecek
 }
 
@@ -1531,7 +1714,8 @@ function panelCiz(){
       <div class="etiket">${yil} Plan Uyumu</div>
       <div class="deger">%${uyum}</div>
       <div class="alt">${yapilan} / ${yilPlan.length} bakım yapıldı</div>
-    </div>`;
+    </div>
+    ${kalibrasyonKutusu()}`;
 
   // Bakım durumu tablosu
   const sirali = [...D.plan].sort((a,b) =>
@@ -2612,6 +2796,524 @@ function parcaDuzenle(kod = ''){
 }
 
 /* =================================================================
+   ÖLÇÜM CİHAZLARI VE KALİBRASYON
+   ================================================================= */
+const CIHAZ_TIPLERI = ['Kumpas','Mikrometre','Komparatör','Mastar','Terazi / Tartı',
+                       'Manometre','Tork Anahtarı','Termometre','Su Terazisi','Diğer'];
+
+/** Cihazın kalibrasyon kayıtları — en yenisi başta */
+function cihazKalibrasyonlari(kod){
+  return (D.kalibrasyonlar || [])
+    .filter(k => k['Cihaz Kodu'] === kod)
+    .sort((a,b) => String(b['Kalibrasyon Tarihi']).localeCompare(String(a['Kalibrasyon Tarihi'])));
+}
+
+/**
+ * Cihazın güncel kalibrasyon durumu.
+ * Geçerlilik tarihi kayıttan okunur; laboratuvar periyottan farklı
+ * bir süre verirse sertifikadaki tarih geçerli olur.
+ */
+function cihazDurumu(c){
+  const kod = c['Cihaz Kodu'];
+  const kayitlar = cihazKalibrasyonlari(kod);
+  const son = kayitlar[0] || null;
+  const disi = c['Durum'] === 'Kullanım Dışı' || c['Durum'] === 'Hurda';
+
+  if (disi)  return { sinif:'gri',   etiket:c['Durum'], son, fark:null, acil:false, yaklasan:false };
+  if (!son)  return { sinif:'gri',   etiket:'Kayıt Yok', son:null, fark:null, acil:true, yaklasan:false,
+                      alt:'Hiç kalibrasyon kaydı yok' };
+
+  // Uygunsuz çıkan kalibrasyonun geçerlilik tarihi anlam taşımaz; gösterilmez
+  if (son['Sonuç'] === 'Uygun Değil')
+    return { sinif:'kirmizi', etiket:'Uygun Değil', son, fark:null, acil:true, yaklasan:false,
+             gecersiz:true, alt:'Kullanımdan alınmalı' };
+
+  const fark = gunFark(son['Geçerlilik Tarihi']);
+  if (fark === null) return { sinif:'gri', etiket:'Tarihsiz', son, fark:null, acil:false, yaklasan:false };
+  if (fark < 0)      return { sinif:'kirmizi', etiket:'Süresi Geçti', son, fark, acil:true, yaklasan:false,
+                              alt:`${-fark} gün geçti` };
+  if (fark <= 30)    return { sinif:'amber', etiket:'Yaklaşıyor', son, fark, acil:false, yaklasan:true,
+                              alt:`${fark} gün kaldı` };
+  return { sinif:'yesil', etiket:'Geçerli', son, fark, acil:false, yaklasan:false, alt:`${fark} gün kaldı` };
+}
+
+/**
+ * Panel kartı. Tek kutu, duruma göre içerik değiştirir:
+ * önce süresi geçenler, yoksa yaklaşanlar, o da yoksa "tümü geçerli".
+ */
+function kalibrasyonKutusu(){
+  const cihazlar = (D.cihazlar || []).filter(c =>
+    c['Durum'] !== 'Hurda' && c['Durum'] !== 'Kullanım Dışı');
+  if (!cihazlar.length) return '';
+
+  const durumlar = cihazlar.map(cihazDurumu);
+  const acil     = durumlar.filter(d => d.acil).length;
+  const yaklasan = durumlar.filter(d => d.yaklasan).length;
+
+  let sinif, deger, etiket, alt;
+  if (acil){
+    sinif = 'kritik'; deger = acil; etiket = 'Kalibrasyon Gerekiyor';
+    alt = 'Süresi geçti veya kaydı yok';
+  } else if (yaklasan){
+    sinif = 'uyari'; deger = yaklasan; etiket = 'Kalibrasyon Yaklaşıyor';
+    alt = '30 gün içinde dolacak';
+  } else {
+    sinif = 'iyi'; deger = cihazlar.length; etiket = 'Ölçüm Cihazı';
+    alt = 'Tümünün kalibrasyonu geçerli';
+  }
+  return `<div class="kutu ${sinif}" style="cursor:pointer" onclick="cihazSayfasiAc()">
+      <div class="etiket">${etiket}</div>
+      <div class="deger">${deger}</div>
+      <div class="alt">${alt}</div>
+    </div>`;
+}
+
+/** Panel kartından Ölçüm Cihazları sayfasına geçer, dikkat gerekenleri süzer */
+function cihazSayfasiAc(){
+  const dugme = document.querySelector('nav button[data-sayfa="cihaz"]');
+  if (!dugme) return;
+  dugme.click();
+  const durumlar = (D.cihazlar || [])
+    .filter(c => c['Durum'] !== 'Hurda' && c['Durum'] !== 'Kullanım Dışı')
+    .map(cihazDurumu);
+  if (durumlar.some(d => d.acil || d.yaklasan)){
+    document.getElementById('fCihazDurum').value = 'dikkat';
+    cihazListele();
+  }
+}
+
+function cihazListele(){
+  const ara  = document.getElementById('fCihazAra').value.toLowerCase();
+  const tip  = document.getElementById('fCihazTip').value;
+  const drm  = document.getElementById('fCihazDurum').value;
+  const liste = (D.cihazlar || []).filter(c => {
+    if (tip && c['Tip'] !== tip) return false;
+    if (drm === 'dikkat'){ const d = cihazDurumu(c); if (!d.acil && !d.yaklasan) return false; }
+    else if (drm && c['Durum'] !== drm) return false;
+    if (!ara) return true;
+    return [c['Cihaz Kodu'], c['Cihaz Adı'], c['Seri No'], c['Marka / Model'], c['Kullanım Yeri']]
+      .some(x => String(x || '').toLowerCase().includes(ara));
+  });
+
+  const g = document.getElementById('cihazTablo');
+  if (!liste.length){
+    g.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:28px;color:var(--metin-2)">
+      ${(D.cihazlar || []).length ? 'Ölçütlere uyan cihaz yok.'
+        : 'Henüz ölçüm cihazı eklenmemiş. Sağ üstten “+ Yeni Cihaz” ile başlayın.'}</td></tr>`;
+    return;
+  }
+
+  g.innerHTML = liste.map(c => {
+    const d = cihazDurumu(c);
+    const kod = kacis(c['Cihaz Kodu']);
+    return `<tr style="cursor:pointer" onclick="cihazKarti('${kod}')">
+      <td><strong>${kod}</strong></td>
+      <td>${kacis(c['Cihaz Adı'])}${c['Marka / Model'] ?
+        `<br><span style="color:var(--metin-2);font-size:12px">${kacis(c['Marka / Model'])}</span>` : ''}</td>
+      <td class="dar-gizle">${kacis(c['Tip'])}</td>
+      <td class="dar-gizle">${kacis(c['Ölçüm Aralığı'] || '—')}</td>
+      <td class="dar-gizle">${kacis(c['Kullanım Yeri'] || '—')}</td>
+      <td class="dar-gizle">${d.son ? tarihTR(d.son['Kalibrasyon Tarihi']) : '—'}</td>
+      <td>${d.son && !d.gecersiz ? tarihTR(d.son['Geçerlilik Tarihi']) : '—'}${d.alt ?
+        `<br><span style="color:var(--metin-2);font-size:12px">${kacis(d.alt)}</span>` : ''}</td>
+      <td><span class="rozet ${d.sinif}">${kacis(d.etiket)}</span></td>
+      <td class="dar-gizle" style="text-align:right" onclick="event.stopPropagation()">
+        <button class="btn kucuk" onclick="kalibrasyonDuzenle('${kod}')">Kalibrasyon Ekle</button></td>
+    </tr>`;
+  }).join('');
+}
+
+/* ---------- Cihaz sicil kartı ---------- */
+function cihazKarti(kod){
+  const c = (D.cihazlar || []).find(x => x['Cihaz Kodu'] === kod);
+  if (!c) return;
+  const d = cihazDurumu(c);
+  const kayitlar = cihazKalibrasyonlari(kod);
+
+  modalAc(`${kod} — Kalibrasyon Kartı`, `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <span class="rozet ${d.sinif}">${kacis(d.etiket)}</span>
+      ${d.alt ? `<span style="color:var(--metin-2);font-size:13px">${kacis(d.alt)}</span>` : ''}
+    </div>
+
+    <div class="bolum">1 — Cihaz Kimlik Bilgileri</div>
+    <dl class="bilgi">
+      <dt>Cihaz Adı</dt><dd>${kacis(c['Cihaz Adı'])}</dd>
+      <dt>Cihaz Kodu</dt><dd>${kacis(c['Cihaz Kodu'])}</dd>
+      <dt>Tip</dt><dd>${kacis(c['Tip'])}</dd>
+      <dt>Marka / Model</dt><dd>${kacis(c['Marka / Model'] || '—')}</dd>
+      <dt>Seri No</dt><dd>${kacis(c['Seri No'] || '—')}</dd>
+      <dt>Ölçüm Aralığı</dt><dd>${kacis(c['Ölçüm Aralığı'] || '—')}</dd>
+      <dt>Çözünürlük</dt><dd>${kacis(c['Çözünürlük'] || '—')}</dd>
+      <dt>Tolerans / Belirsizlik</dt><dd>${kacis(c['Tolerans'] || '—')}</dd>
+      <dt>Kullanım Yeri</dt><dd>${kacis(c['Kullanım Yeri'] || '—')}</dd>
+      <dt>Sorumlu</dt><dd>${kacis(c['Sorumlu'] || '—')}</dd>
+      <dt>Kalibrasyon Periyodu</dt><dd>${kacis(String(c['Periyot (Ay)'] || 12))} ay</dd>
+      <dt>Durum</dt><dd>${kacis(c['Durum'])}</dd>
+      ${c['Notlar'] ? `<dt>Notlar</dt><dd>${kacis(c['Notlar'])}</dd>` : ''}
+    </dl>
+
+    <div class="bolum">2 — Kalibrasyon Geçmişi</div>
+    <div class="tablo-sar"><table>
+      <thead><tr><th>Tarih</th><th>Geçerlilik</th><th>Kaynak / Yapan</th>
+        <th>Sertifika</th><th>Sonuç</th><th>Sapma</th><th></th></tr></thead>
+      <tbody>${kayitlar.length ? kayitlar.map(k => {
+        const sin = k['Sonuç'] === 'Uygun Değil' ? 'kirmizi'
+                  : k['Sonuç'] === 'Şartlı Uygun' ? 'amber' : 'yesil';
+        const kid = kacis(k['Kayıt ID']);
+        return `<tr>
+          <td>${tarihTR(k['Kalibrasyon Tarihi'])}</td>
+          <td>${k['Sonuç'] === 'Uygun Değil' ? '—' : tarihTR(k['Geçerlilik Tarihi'])}</td>
+          <td>${kacis(k['Kaynak'])}${k['Yapan'] ?
+            `<br><span style="color:var(--metin-2);font-size:12px">${kacis(k['Yapan'])}</span>` : ''}${
+            k['Referans Cihaz'] ?
+              `<br><span style="color:var(--metin-2);font-size:12px">Referans: ${kacis(k['Referans Cihaz'])}</span>`
+            : k['Akreditasyon No'] ?
+              `<br><span style="color:var(--metin-2);font-size:12px">Akreditasyon: ${kacis(k['Akreditasyon No'])}</span>` : ''}</td>
+          <td>${kacis(k['Sertifika No'] || '—')}${k['Sertifika Dosyası'] ?
+            `<br><a href="#" onclick="sertifikaGoster('${kacis(k['Sertifika Dosyası'])}');return false"
+               style="color:var(--mavi);font-size:12px">Dosyayı aç</a>` : ''}</td>
+          <td><span class="rozet ${sin}">${kacis(k['Sonuç'])}</span>${k['Geriye Dönük Değerlendirme'] ?
+            `<br><span style="color:var(--metin-2);font-size:12px">Geriye dönük değerlendirildi</span>` : ''}</td>
+          <td>${kacis(k['Sapma'] || '—')}</td>
+          <td style="text-align:right">
+            <button class="btn kucuk ikincil" onclick="kalibrasyonDuzenle('${kacis(kod)}','${kid}')">Düzenle</button></td>
+        </tr>`;
+      }).join('') : '<tr><td colspan="7" class="bos">Henüz kalibrasyon kaydı yok.</td></tr>'}</tbody>
+    </table></div>
+
+    ${kayitlar.some(k => k['Geriye Dönük Değerlendirme']) ? `
+    <div class="bolum">3 — Uygunsuzluk Değerlendirmeleri</div>
+    <div class="tablo-sar"><table>
+      <thead><tr><th width="16%">Tarih</th><th width="16%">Sonuç</th><th>Geriye Dönük Değerlendirme</th></tr></thead>
+      <tbody>${kayitlar.filter(k => k['Geriye Dönük Değerlendirme']).map(k => `<tr>
+        <td>${tarihTR(k['Kalibrasyon Tarihi'])}</td>
+        <td>${kacis(k['Sonuç'])}</td>
+        <td>${kacis(k['Geriye Dönük Değerlendirme'])}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>` : ''}`,
+    [{ metin:'Cihazı Düzenle', sinif:'ikincil', tikla: () => cihazDuzenle(kod) },
+     { metin:'Kalibrasyon Ekle', sinif:'', tikla: () => kalibrasyonDuzenle(kod) },
+     { metin:'Kapat', sinif:'ikincil', tikla: modalKapat }]);
+}
+
+/* ---------- Cihaz ekle / düzenle ---------- */
+function cihazDuzenle(kod = ''){
+  const c = kod ? (D.cihazlar || []).find(x => x['Cihaz Kodu'] === kod) : {};
+  const g = a => kacis(c[a] || '');
+  const sec = (deger, liste) => liste.map(o =>
+    `<option${deger === o ? ' selected' : ''}>${o}</option>`).join('');
+
+  modalAc(kod ? 'Cihaz Düzenle — ' + kod : 'Yeni Ölçüm Cihazı', `
+    <div class="form-izgara">
+      <div class="alan"><label>Cihaz Kodu *</label>
+        <input id="chKod" value="${g('Cihaz Kodu')}" ${kod?'readonly':''} placeholder="KMP-01"></div>
+      <div class="alan"><label>Cihaz Adı *</label>
+        <input id="chAd" value="${g('Cihaz Adı')}" placeholder="Dijital Kumpas"></div>
+      <div class="alan"><label>Tip</label>
+        <select id="chTip">${sec(c['Tip'] || 'Kumpas', CIHAZ_TIPLERI)}</select></div>
+      <div class="alan"><label>Marka / Model</label>
+        <input id="chMarka" value="${g('Marka / Model')}" placeholder="Mitutoyo 500-196-30"></div>
+      <div class="alan"><label>Seri No</label><input id="chSeri" value="${g('Seri No')}"></div>
+      <div class="alan"><label>Ölçüm Aralığı</label>
+        <input id="chAralik" value="${g('Ölçüm Aralığı')}" placeholder="0-150 mm"></div>
+      <div class="alan"><label>Çözünürlük</label>
+        <input id="chCozunurluk" value="${g('Çözünürlük')}" placeholder="0,01 mm"></div>
+      <div class="alan"><label>Tolerans / Belirsizlik</label>
+        <input id="chTolerans" value="${g('Tolerans')}" placeholder="±0,02 mm"></div>
+      <div class="alan"><label>Kullanım Yeri</label>
+        <input id="chYer" value="${g('Kullanım Yeri')}" placeholder="Girdi Kalite Kontrol"></div>
+      <div class="alan"><label>Sorumlu</label><input id="chSorumlu" value="${g('Sorumlu')}"></div>
+      <div class="alan"><label>Kalibrasyon Periyodu (ay)</label>
+        <input type="number" id="chPeriyot" value="${c['Periyot (Ay)'] || 12}" min="1" max="120"></div>
+      <div class="alan"><label>Durum</label>
+        <select id="chDurum">${sec(c['Durum'] || 'Kullanımda',
+          ['Kullanımda','Serviste','Kullanım Dışı','Hurda'])}</select></div>
+      <div class="alan genis"><label>Notlar</label><textarea id="chNot">${g('Notlar')}</textarea></div>
+    </div>`,
+    [...(kod ? [{ metin:'Sil', sinif:'tehlike', tikla: async () => {
+        if (!confirm(`${kod} ve tüm kalibrasyon kayıtları silinecek. Sertifika dosyaları da silinir. Emin misiniz?`)) return;
+        yukle(true, 'Siliniyor...');
+        try { await api('cihazSil',{kod}); modalKapat(); await veriYukle(); bildir('Silindi','basari'); }
+        catch(e){ bildir(e.message,'hata'); } finally { yukle(false); }
+     }}] : []),
+     { metin:'İptal', sinif:'ikincil', tikla: kod ? (() => cihazKarti(kod)) : modalKapat },
+     { metin:'Kaydet', sinif:'', tikla: async () => {
+        const yeni = {
+          'Cihaz Kodu':document.getElementById('chKod').value.trim(),
+          'Cihaz Adı':document.getElementById('chAd').value.trim(),
+          'Tip':document.getElementById('chTip').value,
+          'Marka / Model':document.getElementById('chMarka').value,
+          'Seri No':document.getElementById('chSeri').value,
+          'Ölçüm Aralığı':document.getElementById('chAralik').value,
+          'Çözünürlük':document.getElementById('chCozunurluk').value,
+          'Tolerans':document.getElementById('chTolerans').value,
+          'Kullanım Yeri':document.getElementById('chYer').value,
+          'Sorumlu':document.getElementById('chSorumlu').value,
+          'Periyot (Ay)':parseInt(document.getElementById('chPeriyot').value,10) || 12,
+          'Durum':document.getElementById('chDurum').value,
+          'Notlar':document.getElementById('chNot').value
+        };
+        if (!yeni['Cihaz Kodu'] || !yeni['Cihaz Adı'])
+          return bildir('Cihaz kodu ve adı zorunlu', 'hata');
+        yukle(true);
+        try { await api('cihazKaydet',{cihaz:yeni}); modalKapat(); await veriYukle(); bildir('Kaydedildi','basari'); }
+        catch(e){ bildir(e.message,'hata'); } finally { yukle(false); }
+     }}], true);
+}
+
+/* ---------- Kalibrasyon kaydı ---------- */
+function kalibrasyonDuzenle(cihazKodu, kayitId = ''){
+  const c = (D.cihazlar || []).find(x => x['Cihaz Kodu'] === cihazKodu);
+  if (!c) return bildir('Cihaz bulunamadı', 'hata');
+  const k = kayitId ? (D.kalibrasyonlar || []).find(x => x['Kayıt ID'] === kayitId) : {};
+  const g = a => kacis(k[a] || '');
+  const tarih = a => String(k[a] || '').substring(0,10);
+  const sec = (deger, liste) => liste.map(o =>
+    `<option${deger === o ? ' selected' : ''}>${o}</option>`).join('');
+
+  // Yeni kayıtta geçerlilik tarihi periyoda göre önerilir
+  const bugun = tarih('Kalibrasyon Tarihi') || D.bugun;
+  let onerilen = tarih('Geçerlilik Tarihi');
+  if (!onerilen){
+    const t = new Date(bugun + 'T00:00:00');
+    t.setMonth(t.getMonth() + (parseInt(c['Periyot (Ay)'],10) || 12));
+    onerilen = t.toISOString().substring(0,10);
+  }
+
+  modalAc((kayitId ? 'Kalibrasyon Düzenle' : 'Yeni Kalibrasyon') + ' — ' + cihazKodu, `
+    <p style="margin:0 0 14px;color:var(--metin-2);font-size:13px">
+      ${kacis(c['Cihaz Adı'])}${c['Seri No'] ? ' · Seri No ' + kacis(c['Seri No']) : ''}
+      · Periyot ${c['Periyot (Ay)'] || 12} ay</p>
+    <div class="form-izgara">
+      <div class="alan"><label>Kalibrasyon Tarihi *</label>
+        <input type="date" id="klTarih" value="${bugun}" onchange="klGecerlilikOner('${kacis(cihazKodu)}')"></div>
+      <div class="alan"><label>Geçerlilik Tarihi *</label>
+        <input type="date" id="klGecerlilik" value="${onerilen}"></div>
+      <div class="alan"><label>Kaynak</label>
+        <select id="klKaynak" onchange="klKaynakDegisti()">
+          ${sec(k['Kaynak'] || 'Dış Lab', ['Dış Lab','İç Kalibrasyon'])}</select></div>
+      <div class="alan"><label id="klYapanEtiket">Laboratuvar Adı</label>
+        <input id="klYapan" value="${g('Yapan')}"></div>
+      <div class="alan" id="klAkreditasyonAlan"><label>Akreditasyon No</label>
+        <input id="klAkreditasyon" value="${g('Akreditasyon No')}" placeholder="AB-XXXX-K"></div>
+      <div class="alan" id="klReferansAlan"><label>Referans Cihaz / Mastar</label>
+        <input id="klReferans" value="${g('Referans Cihaz')}"></div>
+      <div class="alan"><label>Sertifika No</label><input id="klSertifikaNo" value="${g('Sertifika No')}"></div>
+      <div class="alan"><label>Sonuç</label>
+        <select id="klSonuc" onchange="klSonucDegisti()">
+          ${sec(k['Sonuç'] || 'Uygun', ['Uygun','Şartlı Uygun','Uygun Değil'])}</select></div>
+      <div class="alan"><label>Ölçülen Sapma</label>
+        <input id="klSapma" value="${g('Sapma')}" placeholder="+0,01 mm"></div>
+
+      <div class="alan genis" id="klGeriyeAlan">
+        <label>Geriye Dönük Değerlendirme
+          <span style="font-weight:400;color:var(--metin-2)">— IATF 16949 md. 7.1.5.2</span></label>
+        <textarea id="klGeriye" placeholder="Bu cihazla son kalibrasyondan bu yana ölçülen ürünler için yapılan değerlendirme ve alınan aksiyon.">${g('Geriye Dönük Değerlendirme')}</textarea>
+      </div>
+
+      <div class="alan genis">
+        <label>Sertifika Dosyası <span style="font-weight:400;color:var(--metin-2)">— PDF, PNG veya JPEG, en fazla 10 MB</span></label>
+        <div id="klDosyaMevcut">${k['Sertifika Dosyası'] ? `
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <a href="#" onclick="sertifikaGoster('${kacis(k['Sertifika Dosyası'])}');return false"
+               style="color:var(--mavi)">Yüklü sertifikayı aç</a>
+            <button type="button" class="btn kucuk ikincil" onclick="klDosyaKaldir()">Kaldır</button>
+          </div>` : ''}</div>
+        <input type="file" id="klDosya" accept="application/pdf,image/png,image/jpeg">
+      </div>
+
+      <div class="alan genis"><label>Notlar</label><textarea id="klNot">${g('Notlar')}</textarea></div>
+    </div>`,
+    [...(kayitId ? [{ metin:'Sil', sinif:'tehlike', tikla: async () => {
+        if (!confirm('Bu kalibrasyon kaydı ve sertifika dosyası silinecek. Emin misiniz?')) return;
+        yukle(true, 'Siliniyor...');
+        try { await api('kalibrasyonSil',{kayitId}); modalKapat(); await veriYukle(); bildir('Silindi','basari'); }
+        catch(e){ bildir(e.message,'hata'); } finally { yukle(false); }
+     }}] : []),
+     { metin:'İptal', sinif:'ikincil', tikla: () => cihazKarti(cihazKodu) },
+     { metin:'Kaydet', sinif:'', tikla: () => kalibrasyonKaydet(cihazKodu, kayitId, k) }], true);
+
+  klKaynakDegisti(); klSonucDegisti();
+}
+
+/** Kalibrasyon tarihi değişince geçerlilik tarihini periyoda göre tazeler */
+function klGecerlilikOner(cihazKodu){
+  const c = (D.cihazlar || []).find(x => x['Cihaz Kodu'] === cihazKodu);
+  const t = document.getElementById('klTarih').value;
+  if (!c || !t) return;
+  const d = new Date(t + 'T00:00:00');
+  if (isNaN(d)) return;
+  d.setMonth(d.getMonth() + (parseInt(c['Periyot (Ay)'],10) || 12));
+  document.getElementById('klGecerlilik').value = d.toISOString().substring(0,10);
+}
+
+/** Dış lab / iç kalibrasyon seçimine göre alanları göster-gizle */
+function klKaynakDegisti(){
+  const ic = document.getElementById('klKaynak').value === 'İç Kalibrasyon';
+  document.getElementById('klYapanEtiket').textContent = ic ? 'Kalibrasyonu Yapan Kişi' : 'Laboratuvar Adı';
+  document.getElementById('klAkreditasyonAlan').style.display = ic ? 'none' : '';
+  document.getElementById('klReferansAlan').style.display = ic ? '' : 'none';
+}
+
+/** Geriye dönük değerlendirme yalnızca uygunsuzlukta anlamlıdır */
+function klSonucDegisti(){
+  const s = document.getElementById('klSonuc').value;
+  document.getElementById('klGeriyeAlan').style.display = (s === 'Uygun') ? 'none' : '';
+}
+
+function klDosyaKaldir(){
+  document.getElementById('klDosyaMevcut').innerHTML =
+    '<div style="color:var(--metin-2);font-size:13px;margin-bottom:8px">Kaydedince mevcut sertifika silinecek.</div>';
+  document.getElementById('klDosyaMevcut').dataset.kaldir = '1';
+}
+
+async function kalibrasyonKaydet(cihazKodu, kayitId, eski){
+  const tarih  = document.getElementById('klTarih').value;
+  const gecer  = document.getElementById('klGecerlilik').value;
+  const sonuc  = document.getElementById('klSonuc').value;
+  const geriye = document.getElementById('klGeriye').value.trim();
+
+  if (!tarih || !gecer) return bildir('Kalibrasyon ve geçerlilik tarihi zorunlu', 'hata');
+  if (gecer < tarih)    return bildir('Geçerlilik tarihi kalibrasyon tarihinden önce olamaz', 'hata');
+  if (sonuc !== 'Uygun' && !geriye)
+    return bildir('Uygunsuz sonuçta geriye dönük değerlendirme yazılmalı', 'hata');
+
+  const kid = kayitId || ('KAL-' + Date.now().toString(36).toUpperCase());
+  const dosyaGirisi = document.getElementById('klDosya');
+  const dosya = dosyaGirisi.files && dosyaGirisi.files[0];
+  const kaldirildi = document.getElementById('klDosyaMevcut').dataset.kaldir === '1';
+  const eskiYol = (eski && eski['Sertifika Dosyası']) || '';
+
+  yukle(true, dosya ? 'Sertifika yükleniyor...' : 'Kaydediliyor...');
+  try {
+    let yol = eskiYol;
+    if (dosya){
+      yol = await sertifikaYukle(cihazKodu, kid, dosya);
+      // Uzantı değiştiyse eski dosya artık bağlantısız kalır, temizle
+      if (eskiYol && eskiYol !== yol) await sertifikaSil(eskiYol);
+    } else if (kaldirildi && eskiYol){
+      await sertifikaSil(eskiYol);
+      yol = '';
+    }
+
+    await api('kalibrasyonKaydet', { kayit: {
+      'Kayıt ID':kid, 'Cihaz Kodu':cihazKodu,
+      'Kalibrasyon Tarihi':tarih, 'Geçerlilik Tarihi':gecer,
+      'Kaynak':document.getElementById('klKaynak').value,
+      'Yapan':document.getElementById('klYapan').value,
+      'Akreditasyon No':document.getElementById('klAkreditasyon').value,
+      'Referans Cihaz':document.getElementById('klReferans').value,
+      'Sertifika No':document.getElementById('klSertifikaNo').value,
+      'Sonuç':sonuc, 'Sapma':document.getElementById('klSapma').value,
+      'Geriye Dönük Değerlendirme':geriye,
+      'Sertifika Dosyası':yol,
+      'Notlar':document.getElementById('klNot').value
+    }});
+
+    modalKapat();
+    await veriYukle();
+    bildir('Kalibrasyon kaydedildi', 'basari');
+    if (sonuc === 'Uygun Değil')
+      bildir('Cihaz uygunsuz — kullanımdan alındığından emin olun', 'hata');
+  } catch(e){
+    bildir(e.message, 'hata');
+  } finally { yukle(false); }
+}
+
+/**
+ * Yıllık kalibrasyon planı — denetimde doğrudan sunulabilecek döküm.
+ * Cihaz listesi, son kalibrasyon, geçerlilik ve durum tek sayfada.
+ */
+function kalibrasyonPlaniYazdir(){
+  const cihazlar = (D.cihazlar || []).filter(c => c['Durum'] !== 'Hurda');
+  if (!cihazlar.length) return bildir('Yazdırılacak cihaz yok', 'hata');
+
+  const firma = (D.ayarlar.find(a => a['Anahtar'] === 'firma') || {})['Değer'] || '';
+  const sirali = cihazlar.map(c => ({ c, d: cihazDurumu(c) }))
+    .sort((a,b) => String(a.c['Cihaz Kodu']).localeCompare(String(b.c['Cihaz Kodu'])));
+
+  const acil = sirali.filter(x => x.d.acil).length;
+  const uygunsuzlar = (D.kalibrasyonlar || []).filter(k => k['Geriye Dönük Değerlendirme']);
+
+  const w = window.open('', '_blank');
+  if (!w) return bildir('Açılır pencereye izin verin', 'hata');
+
+  w.document.write(`<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
+  <title>Kalibrasyon Planı ${new Date().getFullYear()}</title><style>
+    body{font-family:Arial,sans-serif;font-size:11px;padding:18px;max-width:980px;margin:0 auto;color:#000}
+    h1{font-size:14px;text-align:center;margin-bottom:3px}
+    .firma{text-align:center;font-size:10px;color:#444;margin-bottom:4px}
+    .tarih{text-align:center;font-size:10px;color:#444;margin-bottom:14px}
+    table{width:100%;border-collapse:collapse;margin-bottom:13px}
+    td,th{border:1px solid #666;padding:5px 7px;vertical-align:top}
+    th{background:#E8EAF0;font-weight:bold;text-align:left;font-size:10px}
+    .bas{background:#1F3864;color:#fff;font-weight:bold;padding:5px 7px;margin:13px 0 7px;font-size:11px}
+    .gecti{background:#FBE4E4;font-weight:bold}
+    .yakin{background:#FDF3DC}
+    .imza{margin-top:26px;display:flex;gap:46px}
+    .imza div{border-top:1px solid #000;padding-top:5px;width:220px;text-align:center;font-size:10px}
+    @media print{body{padding:0}}
+  </style></head><body>
+  <h1>ÖLÇÜM CİHAZLARI KALİBRASYON PLANI</h1>
+  <div class="firma">${kacis(firma)}</div>
+  <div class="tarih">Döküm tarihi: ${tarihTR(D.bugun)} · ${cihazlar.length} cihaz${
+    acil ? ` · <strong>${acil} cihaz kalibrasyon bekliyor</strong>` : ''}</div>
+
+  <table>
+    <thead><tr>
+      <th width="8%">Kod</th><th width="16%">Cihaz</th><th width="9%">Tip</th>
+      <th width="11%">Ölçüm Aralığı</th><th width="12%">Kullanım Yeri</th>
+      <th width="6%">Periyot</th><th width="9%">Son Kalib.</th><th width="9%">Geçerlilik</th>
+      <th width="11%">Sertifika No</th><th width="9%">Durum</th>
+    </tr></thead>
+    <tbody>${sirali.map(({c, d}) => `<tr class="${d.acil ? 'gecti' : d.yaklasan ? 'yakin' : ''}">
+      <td>${kacis(c['Cihaz Kodu'])}</td>
+      <td>${kacis(c['Cihaz Adı'])}${c['Seri No'] ? '<br>S/N ' + kacis(c['Seri No']) : ''}</td>
+      <td>${kacis(c['Tip'])}</td>
+      <td>${kacis(c['Ölçüm Aralığı'] || '—')}</td>
+      <td>${kacis(c['Kullanım Yeri'] || '—')}</td>
+      <td>${kacis(String(c['Periyot (Ay)'] || 12))} ay</td>
+      <td>${d.son ? tarihTR(d.son['Kalibrasyon Tarihi']) : '—'}</td>
+      <td>${d.son && !d.gecersiz ? tarihTR(d.son['Geçerlilik Tarihi']) : '—'}</td>
+      <td>${d.son ? kacis(d.son['Sertifika No'] || '—') : '—'}</td>
+      <td>${kacis(d.etiket)}</td>
+    </tr>`).join('')}</tbody>
+  </table>
+
+  ${uygunsuzlar.length ? `<div class="bas">UYGUNSUZLUK VE GERİYE DÖNÜK DEĞERLENDİRMELER</div>
+  <table>
+    <thead><tr><th width="9%">Cihaz</th><th width="10%">Tarih</th>
+      <th width="11%">Sonuç</th><th>Geriye Dönük Değerlendirme</th></tr></thead>
+    <tbody>${uygunsuzlar.map(k => `<tr>
+      <td>${kacis(k['Cihaz Kodu'])}</td>
+      <td>${tarihTR(k['Kalibrasyon Tarihi'])}</td>
+      <td>${kacis(k['Sonuç'])}</td>
+      <td>${kacis(k['Geriye Dönük Değerlendirme'])}</td>
+    </tr>`).join('')}</tbody>
+  </table>` : ''}
+
+  <div class="imza"><div>Hazırlayan</div><div>Onaylayan</div></div>
+  </body></html>`);
+  w.document.close();
+  setTimeout(() => w.print(), 350);
+}
+
+/** Sertifikayı süreli imzalı bağlantıyla yeni sekmede açar */
+async function sertifikaGoster(yol){
+  // Açılır pencere engellenmesin diye sekme hemen açılır, adres sonra yazılır
+  const sekme = window.open('', '_blank');
+  try {
+    const adres = await sertifikaBaglanti(yol);
+    if (sekme) sekme.location = adres;
+    else bildir('Açılır pencereye izin verin', 'hata');
+  } catch(e){
+    if (sekme) sekme.close();
+    bildir(e.message, 'hata');
+  }
+}
+
+/* =================================================================
    RAPORLAR
    ================================================================= */
 async function raporCiz(){
@@ -2715,6 +3417,39 @@ async function raporCizIc(yil){
           <td>${kacis(d.faaliyet)}</td>
           <td>${kacis(d.not || '—')}</td></tr>`).join('')
     : '<tr><td colspan="4" class="bos">Uygunsuzluk kaydı yok.</td></tr>';
+
+  kalibrasyonRaporCiz();
+}
+
+/** Raporlar sayfasındaki kalibrasyon durumu tablosu */
+function kalibrasyonRaporCiz(){
+  const kart = document.getElementById('kartKalibrasyon');
+  const cihazlar = D.cihazlar || [];
+  if (!cihazlar.length){ kart.style.display = 'none'; return; }
+  kart.style.display = '';
+
+  // Dikkat gerekenler üstte: süresi geçmiş, sonra yaklaşan, sonra kalanlar
+  const sirali = cihazlar.map(c => ({ c, d: cihazDurumu(c) }))
+    .sort((a,b) => (b.d.acil - a.d.acil) || (b.d.yaklasan - a.d.yaklasan)
+                || String(a.c['Cihaz Kodu']).localeCompare(String(b.c['Cihaz Kodu'])));
+
+  document.getElementById('raporKalibrasyon').innerHTML = sirali.map(({c, d}) => {
+    const s = d.son;
+    const sonucSinif = !s ? 'gri'
+      : s['Sonuç'] === 'Uygun Değil' ? 'kirmizi'
+      : s['Sonuç'] === 'Şartlı Uygun' ? 'amber' : 'yesil';
+    return `<tr class="tiklanir" onclick="cihazKarti('${kacis(c['Cihaz Kodu'])}')">
+      <td><strong>${kacis(c['Cihaz Kodu'])}</strong></td>
+      <td>${kacis(c['Cihaz Adı'])}</td>
+      <td>${kacis(c['Tip'])}</td>
+      <td>${s ? tarihTR(s['Kalibrasyon Tarihi']) : '—'}</td>
+      <td>${s && !d.gecersiz ? tarihTR(s['Geçerlilik Tarihi']) : '—'}${d.alt ?
+        `<br><span style="color:var(--metin-2);font-size:12px">${kacis(d.alt)}</span>` : ''}</td>
+      <td>${s ? kacis(s['Kaynak']) : '—'}</td>
+      <td>${s ? `<span class="rozet ${sonucSinif}">${kacis(s['Sonuç'])}</span>` : '—'}</td>
+      <td><span class="rozet ${d.sinif}">${kacis(d.etiket)}</span></td>
+    </tr>`;
+  }).join('');
 }
 
 /* =================================================================
