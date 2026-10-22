@@ -648,7 +648,7 @@
    anon anahtarı tarayıcıda görünmek üzere tasarlanmıştır,
    gizli değildir. service_role anahtarı ASLA buraya yazılmaz.
    ================================================================= */
-const SURUM = 'v2026.10.15';
+const SURUM = 'v2026.10.22';
 
 const GOMULU_URL = 'https://nynzlfdzolylocxzcuav.supabase.co';  // Technic 5 projesi
 const GOMULU_KEY = '';   // anon public anahtarı — uygulamada "Bağlantı" ekranından girilir
@@ -991,6 +991,58 @@ async function siradakiId(tablo, sutun, onek){
   return onek + '-' + ('000' + (enBuyuk + 1)).slice(-3);
 }
 
+/**
+ * Onaylanmamış haftanın çizelgesini güncel görev listesine göre eşitler.
+ *
+ * Kurallar:
+ *  - Yeni görev → çizelgeye boş satır olarak eklenir
+ *  - Metni, periyodu veya sırası değişen görev → satır güncellenir, işaretler durur
+ *  - Silinen veya pasife alınan görev → satır yalnızca hiç işaretlenmemişse kaldırılır;
+ *    operatör o maddeyi işaretlemişse kayıt silinmez, yapılan iş kaybolmaz
+ *
+ * Değişiklik yapıldıysa true döner.
+ */
+async function opCizelgeEsitle_(kod, yil, hafta, mevcut, uygun){
+  const dolu = r => !!(r.pzt || r.sal || r.car || r.per || r.cum || r.not_metni);
+  const mevcutHarita = {}, uygunHarita = {};
+  (mevcut || []).forEach(r => { if (r.gorev_id) mevcutHarita[r.gorev_id] = r; });
+  uygun.forEach(g => { uygunHarita[g.gorev_id] = g; });
+
+  const eklenecek = [], guncellenecek = [], silinecek = [];
+
+  uygun.forEach(g => {
+    const r = mevcutHarita[g.gorev_id];
+    if (!r){
+      eklenecek.push({
+        kayit_id: 'OPK-' + yil + '-' + ('0'+hafta).slice(-2) + '-' + kod + '-' + g.gorev_id,
+        makine_kodu: kod, yil, hafta, gorev_id: g.gorev_id,
+        periyot: g.periyot, sira: g.sira, faaliyet: g.faaliyet,
+        pzt:'', sal:'', car:'', per:'', cum:'', not_metni:''
+      });
+    } else if (r.faaliyet !== g.faaliyet || r.periyot !== g.periyot ||
+               (r.sira || 0) !== (g.sira || 0)){
+      guncellenecek.push({ kayitId: r.kayit_id,
+        deger: { faaliyet: g.faaliyet, periyot: g.periyot, sira: g.sira } });
+    }
+  });
+
+  (mevcut || []).forEach(r => {
+    if (!uygunHarita[r.gorev_id] && !dolu(r)) silinecek.push(r.kayit_id);
+  });
+
+  if (!eklenecek.length && !guncellenecek.length && !silinecek.length) return false;
+
+  const isler = [];
+  if (eklenecek.length) isler.push(sbEkle('operator_kontrol', eklenecek));
+  if (silinecek.length) isler.push(sbSil('operator_kontrol',
+    'kayit_id=in.(' + silinecek.map(x => '"' + x + '"').join(',') + ')'));
+  guncellenecek.forEach(u => isler.push(
+    sbGuncel('operator_kontrol', 'kayit_id=eq.' + q(u.kayitId), u.deger)));
+  await Promise.all(isler);
+  return true;
+}
+
+
 const ISLEMLER = {
 
   /* ---------- Bağlantı denemesi ---------- */
@@ -1325,34 +1377,32 @@ const ISLEMLER = {
     if (!kod) throw new Error('Makine seçilmedi.');
     const filtre = 'makine_kodu=eq.' + q(kod) + '&yil=eq.' + yil + '&hafta=eq.' + hafta;
 
-    let mevcut = await sbSec('operator_kontrol', filtre + '&order=periyot,sira');
+    const [ilkSatirlar, onaylar] = await Promise.all([
+      sbSec('operator_kontrol', filtre + '&order=periyot,sira'),
+      sbSec('operator_onay', filtre)
+    ]);
+    const onay = (onaylar && onaylar.length) ? onaylar[0] : null;
+    let mevcut = ilkSatirlar || [];
 
-    if (!mevcut || !mevcut.length){
-      const gorevler = await sbSec('operator_gorevleri',
-        'makine_kodu=eq.' + q(kod) + '&order=periyot,sira');
-      const uygun = (gorevler || []).filter(g =>
-        String(g.aktif || 'Evet').toLowerCase() !== 'hayır');
+    // Onaylanan hafta dondurulur: görev listesi sonradan değişse de kayıt
+    // olduğu gibi kalır, çünkü imzalanmış belge odur.
+    if (onay)
+      return { satirlar: dbdenListe('operator_kontrol', mevcut),
+               onay: dbden('operator_onay', onay), esitlendi: false };
 
-      if (uygun.length){
-        uygun.sort((a,b) => {
-          if (a.periyot !== b.periyot) return a.periyot === 'Günlük' ? -1 : 1;
-          return (a.sira||0) - (b.sira||0);
-        });
-        await sbEkle('operator_kontrol', uygun.map(g => ({
-          kayit_id: 'OPK-' + yil + '-' + ('0'+hafta).slice(-2) + '-' + kod + '-' + g.gorev_id,
-          makine_kodu: kod, yil, hafta, gorev_id: g.gorev_id,
-          periyot: g.periyot, sira: g.sira, faaliyet: g.faaliyet,
-          pzt:'', sal:'', car:'', per:'', cum:'', not_metni:''
-        })));
-        mevcut = await sbSec('operator_kontrol', filtre + '&order=periyot,sira');
-      }
-    }
+    const gorevler = await sbSec('operator_gorevleri',
+      'makine_kodu=eq.' + q(kod) + '&order=periyot,sira');
+    const uygun = (gorevler || [])
+      .filter(g => String(g.aktif || 'Evet').toLowerCase() !== 'hayır')
+      .sort((a,b) => {
+        if (a.periyot !== b.periyot) return a.periyot === 'Günlük' ? -1 : 1;
+        return (a.sira||0) - (b.sira||0);
+      });
 
-    const onay = await sbSec('operator_onay', filtre);
-    return {
-      satirlar: dbdenListe('operator_kontrol', mevcut),
-      onay: (onay && onay.length) ? dbden('operator_onay', onay[0]) : null
-    };
+    const esitlendi = await opCizelgeEsitle_(kod, yil, hafta, mevcut, uygun);
+    if (esitlendi) mevcut = await sbSec('operator_kontrol', filtre + '&order=periyot,sira');
+
+    return { satirlar: dbdenListe('operator_kontrol', mevcut), onay: null, esitlendi };
   },
 
   async opKaydet(p){
@@ -1651,7 +1701,13 @@ async function veriYukle(bildirGoster = false){
     });
 
     hepsiniCiz();
-    if (bildirGoster) bildir('Veriler güncellendi', 'basari');
+    // Elle yenilemede açık çizelge de tazelenir: maddeler başka bir cihazdan
+    // değiştirilmiş olabilir.
+    if (bildirGoster){
+      if (document.getElementById('s-operator').classList.contains('aktif')) await opYukle();
+      else opCizelgeEskidi = true;
+      bildir('Veriler güncellendi', 'basari');
+    }
   } catch (e) {
     bildir(e.message, 'hata');
   } finally {
@@ -2541,7 +2597,9 @@ function makineDetay(kod){
         : '<tr><td colspan="5" class="bos">Operatör görevi tanımlı değil.</td></tr>'}</tbody>
     </table></div>
     <p style="margin-top:9px;font-size:12px;color:var(--metin-2)">
-      Değişiklikler yalnızca bundan sonra açılacak çizelgeleri etkiler, geçmiş kayıtlar olduğu gibi kalır.</p>`,
+      Değişiklikler, <strong>onaylanmamış</strong> haftaların çizelgesine açılışta yansır;
+      işaretlenmiş hücreler korunur. Onaylanan haftalar imzalanmış belge sayıldığı için
+      olduğu gibi kalır.</p>`,
     [{ metin:'Düzenle', sinif:'ikincil', tikla:() => makineDuzenle(kod) },
      { metin:'Arızi İş Emri Aç', sinif:'', tikla:() => { modalKapat(); setTimeout(() => {
         isEmriAcModal(); document.getElementById('yTur').value = 'Arızi';
@@ -2636,11 +2694,13 @@ function opGorevDuzenle(gorevId, makineKodu){
     </div>
     <p style="margin-top:13px;font-size:12.5px;color:var(--metin-2);line-height:1.55">
       Günlük maddeler Pazartesi–Cuma işaretlenir, haftalık maddeler yalnızca cuma.
-      Açılmış çizelgeler değişmez; yeni haftalarda geçerli olur.</p>`,
+      Değişiklik, onaylanmamış haftaların çizelgesine yansır; işaretlenmiş hücreler
+      korunur. Onaylanan haftalar olduğu gibi kalır.</p>`,
     [...(gorevId ? [{ metin:'Sil', sinif:'tehlike', tikla: async () => {
         if (!confirm('Bu operatör maddesi silinecek. Geçmiş çizelgeler etkilenmez. Emin misiniz?')) return;
         yukle(true);
-        try { await api('opGorevSil',{gorevId}); await veriYukle(); makineDetay(makineKodu); bildir('Silindi','basari'); }
+        try { await api('opGorevSil',{gorevId}); opCizelgeEskidi = true;
+              await veriYukle(); makineDetay(makineKodu); bildir('Silindi','basari'); }
         catch(e){ bildir(e.message,'hata'); } finally { yukle(false); }
      }}] : []),
      { metin:'Vazgeç', sinif:'ikincil', tikla:() => makineDetay(makineKodu) },
@@ -2655,7 +2715,8 @@ function opGorevDuzenle(gorevId, makineKodu){
         };
         if (!yeni['Faaliyet']) return bildir('Faaliyet metni zorunlu', 'hata');
         yukle(true);
-        try { await api('opGorevKaydet',{gorev:yeni}); await veriYukle(); makineDetay(makineKodu); bildir('Kaydedildi','basari'); }
+        try { await api('opGorevKaydet',{gorev:yeni}); opCizelgeEskidi = true;
+              await veriYukle(); makineDetay(makineKodu); bildir('Kaydedildi','basari'); }
         catch(e){ bildir(e.message,'hata'); } finally { yukle(false); }
      }}], true);
 }
@@ -3595,6 +3656,11 @@ const GUN_KISA = ['Pzt','Sal','Çar','Per','Cum'];
 const GUN_ALAN = ['Pzt','Sal','Çar','Per','Cum'];
 let opDurum = { yil:null, hafta:null, satirlar:[], onay:null };
 
+/* Kontrol maddeleri değiştiğinde açık çizelge eskir; sekmeye dönünce
+   yeniden yüklenir. Yalnızca madde düzenlendiğinde işaretlenir, böylece
+   kaydedilmemiş işaretler sekme değiştirince kaybolmaz. */
+let opCizelgeEskidi = false;
+
 /** Bir tarihin ISO yıl/hafta numarası */
 function isoHafta(t){
   const d = new Date(Date.UTC(t.getFullYear(), t.getMonth(), t.getDate()));
@@ -3655,22 +3721,19 @@ async function opYukle(){
     document.getElementById('opKilitUyari').innerHTML = '';
     document.getElementById('opMaddeler').innerHTML = kurulu
       ? '<div class="bos">Hiçbir makinede operatör kontrol görevi tanımlı değil.<br>' +
-        'Google Sheets &rarr; <strong>OperatorGorevleri</strong> sayfasından ekleyebilirsiniz.</div>'
+        '<strong>Makineler</strong> &rarr; sicil kartı &rarr; <strong>Operatör Kontrol Maddeleri</strong> ' +
+        'bölümünden ekleyebilirsiniz.</div>'
       : `<div style="background:var(--amber-bg);border-left:3px solid var(--amber);
              padding:16px 18px;border-radius:9px;font-size:13.5px;line-height:1.7">
-          <strong style="font-size:14.5px">Operatör kontrol modülü henüz kurulmamış.</strong>
-          <p style="margin:10px 0 8px">Google Sheets tarafında tek seferlik bir kurulum gerekiyor:</p>
+          <strong style="font-size:14.5px">Operatör kontrol maddesi tanımlı değil.</strong>
+          <p style="margin:10px 0 8px">Çizelgenin oluşabilmesi için önce madde eklenmeli:</p>
           <ol style="margin-left:18px">
-            <li>Google Sheets dosyanızı açın</li>
-            <li><strong>Uzantılar &rarr; Apps Script</strong></li>
-            <li>Kod dosyasının güncel sürüm olduğundan emin olun (içinde
-                <code>operatorModuluKur</code> fonksiyonu geçmeli)</li>
-            <li>Üstteki fonksiyon listesinden <strong>operatorModuluKur</strong> seçip
-                <strong>Çalıştır</strong>'a basın</li>
-            <li>Buraya dönüp sağ üstteki yenile (&#8635;) düğmesine basın</li>
+            <li><strong>Makineler</strong> sekmesine gidin</li>
+            <li>Makineye tıklayıp <strong>sicil kartını</strong> açın</li>
+            <li><strong>Operatör Kontrol Maddeleri</strong> bölümünden günlük ve
+                haftalık maddeleri ekleyin</li>
+            <li>Buraya dönün — çizelge otomatik oluşur</li>
           </ol>
-          <p style="margin-top:10px;color:var(--metin-2)">
-            Mevcut makine, bakım ve iş emri verilerinize dokunulmaz.</p>
         </div>`;
     return;
   }
@@ -3683,7 +3746,9 @@ async function opYukle(){
     const s = await api('opHaftaGetir', { makineKodu:kod, yil:opDurum.yil, hafta:opDurum.hafta });
     opDurum.satirlar = s.satirlar || [];
     opDurum.onay = s.onay || null;
+    opCizelgeEskidi = false;
     opCiz();
+    if (s.esitlendi) bildir('Çizelge güncel kontrol maddelerine göre yenilendi', 'basari');
   } catch(e){ bildir(e.message, 'hata'); }
   finally { yukle(false); }
 }
@@ -3974,7 +4039,7 @@ document.querySelectorAll('nav button').forEach(b => {
     document.getElementById('s-' + b.dataset.sayfa).classList.add('aktif');
     window.scrollTo(0,0);
     // Ağ isteği gerektiren ekranlar ancak açıldıklarında yüklenir
-    if (b.dataset.sayfa === 'operator' && !opDurum.satirlar.length) opYukle();
+    if (b.dataset.sayfa === 'operator' && (!opDurum.satirlar.length || opCizelgeEskidi)) opYukle();
     if (b.dataset.sayfa === 'rapor' && !raporTazeMi) { raporTazeMi = true; raporCiz(); }
   };
 });
